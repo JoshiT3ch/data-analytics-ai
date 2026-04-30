@@ -6,7 +6,7 @@ import pandas as pd
 def _get_output_path(file_path):
     file_name = os.path.splitext(os.path.basename(file_path))[0]
     os.makedirs("outputs", exist_ok=True)
-    return os.path.join("outputs", f"{file_name}_no_empty.xlsx")
+    return f"outputs/{file_name}_no_empty.xlsx"
 
 
 def _remove_empty_rows(df):
@@ -16,8 +16,13 @@ def _remove_empty_rows(df):
 def remove_empty_rows(file_path):
     try:
         if not os.path.exists(file_path):
-            print("File not found")
-            return
+            message = "File not found"
+            print(message)
+            return {
+                "status": "error",
+                "output_file": None,
+                "message": message,
+            }
 
         df = pd.read_excel(file_path)
         cleaned_df = _remove_empty_rows(df)
@@ -27,9 +32,27 @@ def remove_empty_rows(file_path):
 
         print(f"Original rows: {len(df)}")
         print(f"Rows after removing empty rows: {len(cleaned_df)}")
-        print(f"Saved to: {output_path}")
+        message = f"Saved to: {output_path}"
+        print(message)
+        return {
+            "status": "success",
+            "output_file": output_path,
+            "message": message,
+        }
 
     except ValueError as error:
-        print(f"Invalid file: {error}")
+        message = f"Invalid file: {error}"
+        print(message)
+        return {
+            "status": "error",
+            "output_file": None,
+            "message": message,
+        }
     except Exception as error:
-        print(f"Error: {error}")
+        message = f"Error: {error}"
+        print(message)
+        return {
+            "status": "error",
+            "output_file": None,
+            "message": message,
+        }

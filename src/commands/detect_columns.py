@@ -10,16 +10,41 @@ def _infer_column_types(df):
 def detect_columns(file_path):
     try:
         if not os.path.exists(file_path):
-            print("File not found")
-            return
+            message = "File not found"
+            print(message)
+            return {
+                "status": "error",
+                "output_file": None,
+                "message": message,
+            }
 
         df = pd.read_excel(file_path)
+        columns = _infer_column_types(df)
 
         print("Columns and inferred data types:")
-        for column, dtype in _infer_column_types(df):
+        for column, dtype in columns:
             print(f"{column}: {dtype}")
 
+        return {
+            "status": "success",
+            "output_file": None,
+            "message": "Detected columns.",
+            "columns": columns,
+        }
+
     except ValueError as error:
-        print(f"Invalid file: {error}")
+        message = f"Invalid file: {error}"
+        print(message)
+        return {
+            "status": "error",
+            "output_file": None,
+            "message": message,
+        }
     except Exception as error:
-        print(f"Error: {error}")
+        message = f"Error: {error}"
+        print(message)
+        return {
+            "status": "error",
+            "output_file": None,
+            "message": message,
+        }

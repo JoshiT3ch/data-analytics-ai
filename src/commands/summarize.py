@@ -6,7 +6,7 @@ import pandas as pd
 def _get_output_path(file_path):
     file_name = os.path.splitext(os.path.basename(file_path))[0]
     os.makedirs("outputs", exist_ok=True)
-    return os.path.join("outputs", f"{file_name}_summary.txt")
+    return f"outputs/{file_name}_summary.txt"
 
 
 def _build_summary(df):
@@ -40,8 +40,13 @@ def _build_summary(df):
 def summarize(file_path):
     try:
         if not os.path.exists(file_path):
-            print("File not found")
-            return
+            message = "File not found"
+            print(message)
+            return {
+                "status": "error",
+                "output_file": None,
+                "message": message,
+            }
 
         df = pd.read_excel(file_path)
         summary = _build_summary(df)
@@ -51,9 +56,28 @@ def summarize(file_path):
             output_file.write(summary)
 
         print(summary)
-        print(f"Saved to: {output_path}")
+        message = f"Saved to: {output_path}"
+        print(message)
+        return {
+            "status": "success",
+            "output_file": output_path,
+            "message": message,
+            "summary": summary,
+        }
 
     except ValueError as error:
-        print(f"Invalid file: {error}")
+        message = f"Invalid file: {error}"
+        print(message)
+        return {
+            "status": "error",
+            "output_file": None,
+            "message": message,
+        }
     except Exception as error:
-        print(f"Error: {error}")
+        message = f"Error: {error}"
+        print(message)
+        return {
+            "status": "error",
+            "output_file": None,
+            "message": message,
+        }
