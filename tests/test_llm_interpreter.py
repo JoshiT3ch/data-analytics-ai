@@ -64,6 +64,43 @@ class LlmInterpreterTests(unittest.TestCase):
             ],
         )
 
+    def test_normalize_multi_step_plan_chains_transform_output(self):
+        plan = llm_interpreter.normalize_plan(
+            {
+                "steps": [
+                    {
+                        "command": "clean-duplicates",
+                        "file_path": "test.xlsx",
+                        "confidence": 0.95,
+                        "reason": "remove duplicates first",
+                    },
+                    {
+                        "command": "summarize",
+                        "file_path": "test.xlsx",
+                        "confidence": 0.9,
+                        "reason": "summarize the cleaned file",
+                    },
+                ]
+            },
+            "clean duplicate rows and then summarize test.xlsx",
+        )
+
+        self.assertEqual(plan[0]["file_path"], "data/raw/test.xlsx")
+        self.assertEqual(plan[1]["file_path"], "outputs/test_cleaned.xlsx")
+
+    def test_fallback_plan_handles_multi_step_request(self):
+        plan = llm_interpreter._fallback_plan(
+            "clean duplicate rows and then summarize test.xlsx",
+            "test fallback",
+        )
+
+        self.assertEqual(
+            [step["command"] for step in plan],
+            ["clean-duplicates", "summarize"],
+        )
+        self.assertEqual(plan[0]["file_path"], "data/raw/test.xlsx")
+        self.assertEqual(plan[1]["file_path"], "outputs/test_cleaned.xlsx")
+
     def test_malformed_llm_json_retries_then_uses_valid_response(self):
         fake_client_type = type("FakeOpenAI", (_Client,), {})
         fake_client_type.responses = [

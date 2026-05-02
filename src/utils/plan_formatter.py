@@ -91,7 +91,7 @@ def format_execution_summary(result, plan=None):
             [
                 "Execution Summary:",
                 SEPARATOR,
-                "❌ Execution failed",
+                "Execution failed",
                 "Reason: Unknown executor response",
                 SEPARATOR,
             ]
@@ -112,7 +112,7 @@ def format_execution_summary(result, plan=None):
         else:
             outcome = "success"
 
-        lines.append(f"✔ Step {index}: {command} → {outcome}")
+        lines.append(f"OK Step {index}: {command} -> {outcome}")
 
     lines.append(SEPARATOR)
     return "\n".join(lines)
@@ -138,7 +138,7 @@ def format_execution_error(result, plan=None):
         [
             "Execution Summary:",
             SEPARATOR,
-            f"❌ Step {failed_step or '?'} FAILED: {command}",
+            f"FAILED Step {failed_step or '?'}: {command}",
             f"Reason: {message}",
             SEPARATOR,
         ]

@@ -1,8 +1,9 @@
+import json
 import sys
 
 from src.core.executor import execute_plan
+from src.core.memory import clear_memory, load_memory
 from src.core.nlp_parser import parse_plan
-from src.core.router import route_command
 from src.utils.plan_formatter import format_execution_plan, format_execution_summary
 
 
@@ -59,11 +60,23 @@ def main():
         print("Usage:")
         print("1. python -m src.main <command> <file>")
         print('2. python -m src.main "natural language input"')
+        print("3. python -m src.main memory")
+        print("4. python -m src.main memory-clear")
         print("Optional flags: --dry-run --debug --confirm")
         return
 
     if len(args) == 1:
         user_input = args[0]
+
+        if user_input == "memory":
+            _safe_print(json.dumps(load_memory(), indent=2))
+            return
+
+        if user_input == "memory-clear":
+            clear_memory()
+            print("Memory cleared.")
+            return
+
         plan = parse_plan(user_input)
 
         if not plan:
@@ -94,7 +107,7 @@ def main():
         )
         return
 
-    route_command(command, file_path)
+    execute_plan([{"command": command, "file_path": file_path}], dry_run=False, debug=False)
 
 
 if __name__ == "__main__":

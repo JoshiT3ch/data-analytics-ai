@@ -2,9 +2,14 @@ import json
 import os
 import re
 
-from dotenv import load_dotenv
 from src.ai.intent_classifier import classify_intent
 from src.core.command_registry import get_command_metadata, supported_commands
+
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    def load_dotenv(*args, **kwargs):
+        return False
 
 try:
     from openai import OpenAI, OpenAIError
@@ -263,7 +268,7 @@ def _load_llm_json(client, user_input):
         response = _create_completion(client, user_input)
         response_text = response.choices[0].message.content or ""
         last_response_text = response_text
-        _safe_print("🧠 LLM RAW RESPONSE:", response_text)
+        _safe_print("LLM RAW RESPONSE:", response_text)
 
         try:
             return json.loads(response_text)
@@ -295,6 +300,7 @@ def normalize_plan(interpreted_request, user_input=None):
 
     source_file_path = _extract_file_path(user_input)
     plan = []
+    current_file_path = None
 
     for index, raw_step in enumerate(steps):
         if not isinstance(raw_step, dict):
@@ -305,11 +311,14 @@ def normalize_plan(interpreted_request, user_input=None):
             return []
 
         raw_file_path = _normalize_file_path(raw_step.get("file_path"))
-        file_path = raw_file_path
-        if index == 0 and not file_path:
+        if index == 0:
+            file_path = raw_file_path or source_file_path or _default_file_path()
+        elif current_file_path:
+            file_path = current_file_path
+        else:
             file_path = source_file_path or _default_file_path()
 
-        if index == 0 and not file_path:
+        if not file_path:
             return []
 
         plan.append(
@@ -320,6 +329,9 @@ def normalize_plan(interpreted_request, user_input=None):
                 "reason": str(raw_step.get("reason") or "Parsed request.").strip(),
             }
         )
+
+        predicted_output = _predict_output_file(command, file_path)
+        current_file_path = predicted_output or file_path
 
     return plan
 

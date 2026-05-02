@@ -5,6 +5,7 @@ from difflib import get_close_matches
 from uuid import uuid4
 
 from src.core.command_registry import COMMANDS, get_command_metadata
+from src.core.memory import update_memory_after_step
 from src.core.router import route_command
 
 
@@ -199,6 +200,7 @@ def execute_plan(plan, dry_run=False, debug=False):
     write_logs = not dry_run
     log_data = _initial_log(plan, dry_run, debug)
     results = []
+    effective_plan = []
     current_file_path = None
     current_file_is_virtual = False
 
@@ -267,6 +269,21 @@ def execute_plan(plan, dry_run=False, debug=False):
         if result.get("status") != "success":
             message = f"Step {index} failed: {result.get('message', 'Command failed.')}"
             return _error_result(message, results, index, log_data, write_logs)
+
+        effective_step = {
+            "command": command,
+            "file_path": file_path,
+        }
+        if "confidence" in step:
+            effective_step["confidence"] = step.get("confidence")
+        if "reason" in step:
+            effective_step["reason"] = step.get("reason")
+        effective_plan.append(effective_step)
+
+        if not dry_run:
+            memory_step = effective_step.copy()
+            memory_step["_latest_plan"] = effective_plan
+            update_memory_after_step(memory_step, result)
 
         next_file_path = _chainable_output_file(
             command,
