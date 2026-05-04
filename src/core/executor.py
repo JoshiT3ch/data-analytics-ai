@@ -145,6 +145,8 @@ def _validate_step_shape(step, index, has_current_file):
 
     file_path = step.get("file_path")
     if not file_path and not has_current_file:
+        if command == "create-chart":
+            return "No input file provided and no current session file found."
         return f"Step {index} is missing a file_path and there is no previous output to use."
 
     if file_path is not None and not isinstance(file_path, str):
@@ -204,6 +206,15 @@ def _should_create_backup(metadata, file_path):
     )
 
 
+def _step_options(step, metadata):
+    option_fields = metadata.get("option_fields") or ()
+    return {
+        field: step.get(field)
+        for field in option_fields
+        if field in step
+    }
+
+
 def execute_plan(plan, dry_run=False, debug=False, preview=False):
     if not isinstance(plan, list) or not plan:
         return _error_result("Could not understand input")
@@ -226,6 +237,7 @@ def execute_plan(plan, dry_run=False, debug=False, preview=False):
 
         command = step["command"]
         metadata = get_command_metadata(command) or {}
+        options = _step_options(step, metadata)
         warnings = []
         file_path = _resolve_step_file(step, current_file_path, warnings)
 
@@ -253,6 +265,7 @@ def execute_plan(plan, dry_run=False, debug=False, preview=False):
             "input_file": file_path,
             "output_file": None,
             "backup_file": None,
+            "options": options,
             "status": "pending",
             "message": "",
             "warnings": warnings,
@@ -274,7 +287,7 @@ def execute_plan(plan, dry_run=False, debug=False, preview=False):
             result = _as_result(
                 command,
                 file_path,
-                route_command(command, file_path, preview=True),
+                route_command(command, file_path, preview=True, **options),
             )
             result["preview"] = True
         else:
@@ -291,7 +304,11 @@ def execute_plan(plan, dry_run=False, debug=False, preview=False):
                         write_logs,
                     )
 
-            result = _as_result(command, file_path, route_command(command, file_path))
+            result = _as_result(
+                command,
+                file_path,
+                route_command(command, file_path, **options),
+            )
             if backup_file:
                 result["backup_file"] = backup_file
 
@@ -309,6 +326,7 @@ def execute_plan(plan, dry_run=False, debug=False, preview=False):
             "command": command,
             "file_path": file_path,
         }
+        effective_step.update(options)
         if "confidence" in step:
             effective_step["confidence"] = step.get("confidence")
         if "reason" in step:

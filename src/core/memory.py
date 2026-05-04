@@ -43,7 +43,16 @@ def _sanitize_plan(plan):
             continue
 
         sanitized_step = {}
-        for key in ("command", "file_path", "confidence", "reason"):
+        for key in (
+            "command",
+            "file_path",
+            "chart_type",
+            "x_column",
+            "y_column",
+            "title",
+            "confidence",
+            "reason",
+        ):
             if key in step:
                 sanitized_step[key] = step[key]
 
@@ -85,6 +94,15 @@ def _memory_file_for_resolution(memory):
 
     if _is_excel_file(latest_input_file):
         return latest_input_file
+
+    try:
+        from src.core.session_memory import load_session_memory
+
+        current_file = load_session_memory().get("current_file")
+        if _is_excel_file(current_file):
+            return current_file
+    except Exception:
+        pass
 
     return None
 

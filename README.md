@@ -14,6 +14,7 @@ A modular CLI-based data analytics tool that processes Excel files using structu
 - Backups before transform commands
 - Preview mode for duplicate cleaning
 - Undo for the latest backed-up file-changing action
+- Chart generation for bar, line, pie, and histogram visualizations
 
 ## Example Usage
 
@@ -33,7 +34,13 @@ python -m src.main "clean duplicate rows from test.xlsx"
 python -m src.main "summarize test.xlsx"
 python -m src.main "remove all blank rows from test.xlsx"
 python -m src.main "what columns are inside test.xlsx"
+python -m src.main "create a bar chart of sales by category from data/raw/sales.xlsx"
+python -m src.main "visualize revenue trend by month from data/raw/sales.xlsx"
+python -m src.main "make a pie chart of product category distribution from data/raw/sales.xlsx"
+python -m src.main "create a histogram of age from data/raw/test.xlsx"
 ```
+
+Charts are saved under `outputs/charts/`.
 
 ### Preview Mode
 

@@ -2,8 +2,10 @@ import json
 import os
 import re
 
+from src.ai.chart_parser import parse_chart_request
 from src.ai.intent_classifier import classify_intent
 from src.core.command_registry import get_command_metadata, supported_commands
+from src.core.session_memory import load_session_memory
 
 try:
     from dotenv import load_dotenv
@@ -29,6 +31,16 @@ EXCEL_PATH_PATTERN = re.compile(
     re.IGNORECASE,
 )
 COMMAND_PATTERNS = {
+    "create-chart": [
+        r"\bchart\b",
+        r"\bgraph\b",
+        r"\bvisualize\b",
+        r"\bvisualise\b",
+        r"\bplot\b",
+        r"\bhistogram\b",
+        r"\bdistribution\b",
+        r"\btrend\b",
+    ],
     "clean-duplicates": [
         r"\bduplicate\b",
         r"\bduplicates\b",
@@ -59,6 +71,7 @@ COMMAND_PATTERNS = {
         r"\bfields\b",
     ],
 }
+CHART_OPTION_FIELDS = ("chart_type", "x_column", "y_column", "title")
 
 
 def _safe_print(*values):
@@ -118,6 +131,13 @@ def _default_file_path():
     return DEFAULT_FILE_PATH
 
 
+def _current_session_file():
+    current_file = load_session_memory().get("current_file")
+    if isinstance(current_file, str) and current_file.lower().endswith(".xlsx"):
+        return current_file
+    return None
+
+
 def _plan_response(plan):
     return {"steps": plan}
 
@@ -162,6 +182,18 @@ def _find_command_mentions(user_input):
 
 def _fallback_plan(user_input, reason):
     safe_input = user_input if isinstance(user_input, str) else ""
+    chart_request = parse_chart_request(safe_input)
+    if chart_request:
+        file_path = _extract_file_path(safe_input) or _current_session_file()
+        chart_request.update(
+            {
+                "file_path": file_path,
+                "confidence": 0.7 if file_path else 0.35,
+                "reason": reason,
+            }
+        )
+        return [chart_request]
+
     file_path = _extract_file_path(safe_input) or _default_file_path()
     commands = _find_command_mentions(safe_input)
 
@@ -209,8 +241,12 @@ Always return this JSON object:
 {
   "steps": [
     {
-      "command": "clean-duplicates | summarize | remove-empty-rows | detect-columns",
-      "file_path": "data/raw/<filename>.xlsx",
+      "command": "clean-duplicates | summarize | remove-empty-rows | detect-columns | create-chart",
+      "file_path": "data/raw/<filename>.xlsx or null",
+      "chart_type": "bar | line | pie | histogram",
+      "x_column": "column name for x/category/value",
+      "y_column": "column name for numeric value, or null",
+      "title": "short chart title",
       "confidence": 0.0,
       "reason": "short explanation"
     }
@@ -222,18 +258,25 @@ Supported command values:
 - summarize: summarize a dataset, including row count, column count, column names, and basic numeric statistics.
 - remove-empty-rows: remove blank rows or empty rows from an Excel file.
 - detect-columns: show columns, data types, schema, structure, or fields.
+- create-chart: create a bar, line, pie, or histogram chart image from an Excel file.
 
 Strict rules:
-- Every command must be exactly one of: clean-duplicates, summarize, remove-empty-rows, detect-columns.
-- Every file_path must be a non-empty .xlsx path.
+- Every command must be exactly one of: clean-duplicates, summarize, remove-empty-rows, detect-columns, create-chart.
+- Every file_path must be a non-empty .xlsx path, except create-chart may use null when the user did not provide a file.
 - A single-step request must still return a steps array with one object.
 - If the user provides only a filename like test.xlsx, return data/raw/test.xlsx.
 - If the user provides a path like data/raw/test.xlsx or C:\\data\\test.xlsx, keep that path.
-- If no .xlsx file is mentioned, use data/raw/test.xlsx.
+- If no .xlsx file is mentioned for create-chart, use null.
+- If no .xlsx file is mentioned for any other command, use data/raw/test.xlsx.
 - Preserve the requested order of operations.
 - If one step creates a cleaned Excel output, use that output file for the next step.
 - clean-duplicates writes outputs/<name>_cleaned.xlsx.
 - remove-empty-rows writes outputs/<name>_no_empty.xlsx.
+- For bar and line charts, set chart_type, x_column, y_column, and title.
+- For pie charts, set chart_type, x_column, y_column as null unless the user asks for a numeric value, and title.
+- For histograms, set chart_type, x_column, y_column as null, and title.
+- For "sales by category", use x_column "Category" and y_column "Sales".
+- For "revenue trend by month", use chart_type "line", x_column "Month", y_column "Revenue", and title "Revenue Trend by Month".
 - confidence must be a number between 0 and 1.
 - reason must be short and must not contain Markdown.
 """.strip()
@@ -299,6 +342,7 @@ def normalize_plan(interpreted_request, user_input=None):
         return []
 
     source_file_path = _extract_file_path(user_input)
+    parsed_chart_request = parse_chart_request(user_input)
     plan = []
     current_file_path = None
 
@@ -312,23 +356,37 @@ def normalize_plan(interpreted_request, user_input=None):
 
         raw_file_path = _normalize_file_path(raw_step.get("file_path"))
         if index == 0:
-            file_path = raw_file_path or source_file_path or _default_file_path()
+            if command == "create-chart":
+                file_path = raw_file_path or source_file_path or _current_session_file()
+            else:
+                file_path = raw_file_path or source_file_path or _default_file_path()
         elif current_file_path:
             file_path = current_file_path
         else:
-            file_path = source_file_path or _default_file_path()
+            if command == "create-chart":
+                file_path = source_file_path or _current_session_file()
+            else:
+                file_path = source_file_path or _default_file_path()
 
-        if not file_path:
+        if not file_path and command != "create-chart":
             return []
 
-        plan.append(
-            {
-                "command": command,
-                "file_path": file_path,
-                "confidence": _get_confidence(raw_step.get("confidence")),
-                "reason": str(raw_step.get("reason") or "Parsed request.").strip(),
-            }
-        )
+        step = {
+            "command": command,
+            "file_path": file_path,
+            "confidence": _get_confidence(raw_step.get("confidence")),
+            "reason": str(raw_step.get("reason") or "Parsed request.").strip(),
+        }
+
+        if command == "create-chart":
+            chart_defaults = parsed_chart_request or {}
+            for field in CHART_OPTION_FIELDS:
+                value = raw_step.get(field)
+                if value in (None, ""):
+                    value = chart_defaults.get(field)
+                step[field] = value
+
+        plan.append(step)
 
         predicted_output = _predict_output_file(command, file_path)
         current_file_path = predicted_output or file_path
@@ -346,7 +404,6 @@ def interpret_user_request(user_input: str):
     load_dotenv(dotenv_path=".env")
 
     api_key = os.getenv("OPENAI_API_KEY")
-    print("API KEY LOADED:", bool(api_key))
 
     if not api_key:
         print("No API key found. Using rule-based fallback.")

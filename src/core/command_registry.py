@@ -1,6 +1,7 @@
 import os
 
 from src.commands.clean_excel import clean_duplicates
+from src.commands.create_chart import create_chart
 from src.commands.detect_columns import detect_columns
 from src.commands.remove_empty_rows import remove_empty_rows
 from src.commands.summarize import summarize
@@ -60,6 +61,16 @@ COMMAND_REGISTRY = {
         "output_path": None,
         "creates_backup": False,
         "supports_preview": False,
+    },
+    "create-chart": {
+        "function": create_chart,
+        "type": "visualization",
+        "produces_output": True,
+        "chainable_output": False,
+        "output_path": None,
+        "creates_backup": False,
+        "supports_preview": False,
+        "option_fields": ("chart_type", "x_column", "y_column", "title"),
     },
 }
 

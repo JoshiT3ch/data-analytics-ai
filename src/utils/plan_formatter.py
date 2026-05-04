@@ -57,6 +57,7 @@ def _plan_rows(plan):
                 "input_file": input_file,
                 "output_file": output_file,
                 "warning": warning,
+                "step_data": step,
             }
         )
 
@@ -72,6 +73,13 @@ def format_execution_plan(plan):
 
         if row["output_file"]:
             lines.append(f"Output: {row['output_file']}")
+
+        step = row.get("step_data") or {}
+        if step.get("chart_type"):
+            lines.append(f"Chart: {step.get('chart_type')}")
+            lines.append(f"X column: {step.get('x_column') or 'not provided'}")
+            if step.get("y_column"):
+                lines.append(f"Y column: {step.get('y_column')}")
 
         if row["warning"]:
             lines.append(f"Note: {row['warning']}")
@@ -113,7 +121,7 @@ def format_execution_summary(result, plan=None):
         output_file = step_result.get("output_file")
         message = step_result.get("message")
 
-        if isinstance(output_file, str) and output_file.lower().endswith(".xlsx"):
+        if isinstance(output_file, str):
             outcome = output_file
         elif result.get("message", "").lower().startswith("preview") and message:
             outcome = message

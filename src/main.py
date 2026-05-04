@@ -81,6 +81,7 @@ def main():
         print("3. python -m src.main memory")
         print("4. python -m src.main memory-clear")
         print("5. python -m src.main undo")
+        print('6. python -m src.main "create a bar chart of sales by category from data/raw/sales.xlsx"')
         print("Optional flags: --preview --dry-run --debug --confirm")
         return
 
