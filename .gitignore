@@ -11,6 +11,8 @@ venv/
 
 # Data files
 .data_analytics_memory.json
+.memory/
+backups/
 data/raw/
 outputs/
 logs/run_*.json

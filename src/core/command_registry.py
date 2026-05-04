@@ -31,6 +31,8 @@ COMMAND_REGISTRY = {
         "produces_output": True,
         "chainable_output": True,
         "output_path": cleaned_output_path,
+        "creates_backup": True,
+        "supports_preview": True,
     },
     "summarize": {
         "function": summarize,
@@ -38,6 +40,8 @@ COMMAND_REGISTRY = {
         "produces_output": True,
         "chainable_output": False,
         "output_path": summary_output_path,
+        "creates_backup": False,
+        "supports_preview": False,
     },
     "remove-empty-rows": {
         "function": remove_empty_rows,
@@ -45,6 +49,8 @@ COMMAND_REGISTRY = {
         "produces_output": True,
         "chainable_output": True,
         "output_path": no_empty_output_path,
+        "creates_backup": True,
+        "supports_preview": False,
     },
     "detect-columns": {
         "function": detect_columns,
@@ -52,6 +58,8 @@ COMMAND_REGISTRY = {
         "produces_output": False,
         "chainable_output": False,
         "output_path": None,
+        "creates_backup": False,
+        "supports_preview": False,
     },
 }
 

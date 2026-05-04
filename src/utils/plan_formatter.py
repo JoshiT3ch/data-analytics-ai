@@ -100,15 +100,23 @@ def format_execution_summary(result, plan=None):
     if result.get("status") != "success":
         return format_execution_error(result, plan)
 
-    title = "Dry Run Summary:" if result.get("message", "").lower().startswith("dry run") else "Execution Summary:"
+    if result.get("message", "").lower().startswith("dry run"):
+        title = "Dry Run Summary:"
+    elif result.get("message", "").lower().startswith("preview"):
+        title = "Preview Summary:"
+    else:
+        title = "Execution Summary:"
     lines = [title, SEPARATOR]
 
     for index, step_result in enumerate(result.get("results", []), start=1):
         command = step_result.get("command", "unknown")
         output_file = step_result.get("output_file")
+        message = step_result.get("message")
 
         if isinstance(output_file, str) and output_file.lower().endswith(".xlsx"):
             outcome = output_file
+        elif result.get("message", "").lower().startswith("preview") and message:
+            outcome = message
         else:
             outcome = "success"
 

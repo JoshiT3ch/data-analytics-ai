@@ -1,5 +1,6 @@
 import os
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -14,12 +15,18 @@ class ExecutorTests(unittest.TestCase):
         self.sample_file = "data/raw/test_executor_unit.xlsx"
         self.cleaned_file = "outputs/test_executor_unit_cleaned.xlsx"
         self.memory_file = f"tmp/test_executor_memory_{uuid4().hex}.json"
+        self.session_memory_file = f"tmp/test_executor_session_{uuid4().hex}.json"
 
         with open(self.sample_file, "wb") as file:
             file.write(b"placeholder")
 
     def tearDown(self):
-        for file_path in (self.sample_file, self.cleaned_file, self.memory_file):
+        for file_path in (
+            self.sample_file,
+            self.cleaned_file,
+            self.memory_file,
+            self.session_memory_file,
+        ):
             if os.path.exists(file_path):
                 os.remove(file_path)
 
@@ -49,7 +56,16 @@ class ExecutorTests(unittest.TestCase):
         with patch("src.core.executor.route_command", side_effect=fake_route):
             with patch("src.core.executor._write_log", return_value="logs/test.json"):
                 with patch("src.core.memory.MEMORY_FILE", self.memory_file):
-                    result = executor.execute_plan(plan)
+                    with patch(
+                        "src.core.session_memory.SESSION_FILE",
+                        Path(self.session_memory_file),
+                    ):
+                        with patch("src.core.session_memory.SESSION_DIR", Path("tmp")):
+                            with patch(
+                                "src.core.executor.create_backup",
+                                return_value="backups/test.xlsx",
+                            ):
+                                result = executor.execute_plan(plan)
 
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["results"][1]["input_file"], self.cleaned_file)

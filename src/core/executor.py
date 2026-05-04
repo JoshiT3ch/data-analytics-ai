@@ -4,9 +4,11 @@ from datetime import datetime
 from difflib import get_close_matches
 from uuid import uuid4
 
+from src.core.backup_manager import create_backup
 from src.core.command_registry import COMMANDS, get_command_metadata
 from src.core.memory import update_memory_after_step
 from src.core.router import route_command
+from src.core.session_memory import record_result
 
 
 RAW_DATA_DIR = os.path.join("data", "raw")
@@ -180,11 +182,12 @@ def _validate_file(file_path, dry_run=False, allow_virtual=False):
     return _missing_file_message(file_path)
 
 
-def _initial_log(plan, dry_run, debug):
+def _initial_log(plan, dry_run, debug, preview=False):
     return {
         "started_at": datetime.now().isoformat(timespec="seconds"),
         "status": "running",
         "dry_run": dry_run,
+        "preview": preview,
         "debug": debug,
         "plan": plan,
         "steps": [],
@@ -193,12 +196,20 @@ def _initial_log(plan, dry_run, debug):
     }
 
 
-def execute_plan(plan, dry_run=False, debug=False):
+def _should_create_backup(metadata, file_path):
+    return (
+        bool(metadata.get("creates_backup"))
+        and isinstance(file_path, str)
+        and file_path.lower().endswith(".xlsx")
+    )
+
+
+def execute_plan(plan, dry_run=False, debug=False, preview=False):
     if not isinstance(plan, list) or not plan:
         return _error_result("Could not understand input")
 
-    write_logs = not dry_run
-    log_data = _initial_log(plan, dry_run, debug)
+    write_logs = not dry_run and not preview
+    log_data = _initial_log(plan, dry_run, debug, preview)
     results = []
     effective_plan = []
     current_file_path = None
@@ -220,7 +231,7 @@ def execute_plan(plan, dry_run=False, debug=False):
 
         file_error = _validate_file(
             file_path,
-            dry_run=dry_run,
+            dry_run=dry_run or preview,
             allow_virtual=current_file_is_virtual,
         )
         if file_error:
@@ -241,6 +252,7 @@ def execute_plan(plan, dry_run=False, debug=False):
             "command_type": metadata.get("type"),
             "input_file": file_path,
             "output_file": None,
+            "backup_file": None,
             "status": "pending",
             "message": "",
             "warnings": warnings,
@@ -258,12 +270,35 @@ def execute_plan(plan, dry_run=False, debug=False):
                 "command": command,
                 "input_file": file_path,
             }
+        elif preview:
+            result = _as_result(
+                command,
+                file_path,
+                route_command(command, file_path, preview=True),
+            )
+            result["preview"] = True
         else:
+            backup_file = None
+            if _should_create_backup(metadata, file_path):
+                try:
+                    backup_file = create_backup(file_path, command)
+                except (OSError, FileNotFoundError) as error:
+                    return _error_result(
+                        f"Could not create backup before {command}: {error}",
+                        results,
+                        index,
+                        log_data,
+                        write_logs,
+                    )
+
             result = _as_result(command, file_path, route_command(command, file_path))
+            if backup_file:
+                result["backup_file"] = backup_file
 
         results.append(result)
         transition["status"] = result.get("status")
         transition["output_file"] = result.get("output_file")
+        transition["backup_file"] = result.get("backup_file")
         transition["message"] = result.get("message", "")
 
         if result.get("status") != "success":
@@ -280,16 +315,17 @@ def execute_plan(plan, dry_run=False, debug=False):
             effective_step["reason"] = step.get("reason")
         effective_plan.append(effective_step)
 
-        if not dry_run:
+        if not dry_run and not preview:
             memory_step = effective_step.copy()
             memory_step["_latest_plan"] = effective_plan
             update_memory_after_step(memory_step, result)
+            record_result(command, file_path, result)
 
         next_file_path = _chainable_output_file(
             command,
             file_path,
             result,
-            dry_run=dry_run,
+            dry_run=dry_run or preview,
         )
 
         if metadata.get("chainable_output") and not next_file_path:
@@ -297,16 +333,22 @@ def execute_plan(plan, dry_run=False, debug=False):
             return _error_result(message, results, index, log_data, write_logs)
 
         if next_file_path and next_file_path != file_path:
-            print(f"Working file updated: {file_path} -> {next_file_path}")
+            if not preview:
+                print(f"Working file updated: {file_path} -> {next_file_path}")
             transition["next_working_file"] = next_file_path
             current_file_path = next_file_path
-            current_file_is_virtual = dry_run
+            current_file_is_virtual = dry_run or preview
         else:
             current_file_path = file_path
             current_file_is_virtual = False
 
     log_data["status"] = "success"
-    log_data["message"] = "Dry run completed successfully." if dry_run else "Plan executed successfully."
+    if dry_run:
+        log_data["message"] = "Dry run completed successfully."
+    elif preview:
+        log_data["message"] = "Preview completed successfully."
+    else:
+        log_data["message"] = "Plan executed successfully."
     log_data["results"] = results
     log_file = _write_log(log_data) if write_logs else None
 

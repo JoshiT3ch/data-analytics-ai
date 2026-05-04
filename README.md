@@ -10,6 +10,10 @@ A modular CLI-based data analytics tool that processes Excel files using structu
 - Detect column types
 - Natural language command support
 - Multi-step natural language workflows with output handoff
+- Session memory with command history
+- Backups before transform commands
+- Preview mode for duplicate cleaning
+- Undo for the latest backed-up file-changing action
 
 ## Example Usage
 
@@ -30,6 +34,17 @@ python -m src.main "summarize test.xlsx"
 python -m src.main "remove all blank rows from test.xlsx"
 python -m src.main "what columns are inside test.xlsx"
 ```
+
+### Preview Mode
+
+Preview duplicate cleaning without writing an output file:
+
+```bash
+python -m src.main "clean duplicate rows from test.xlsx" --preview
+python -m src.main clean-duplicates data/raw/test.xlsx --preview
+```
+
+Commands that do not support preview yet return a friendly message instead of making changes.
 
 ### Multi-Step Natural Language Commands
 
@@ -59,6 +74,15 @@ python -m src.main memory-clear
 ```
 
 Use `memory` to show the current session memory and `memory-clear` to reset it.
+
+### Undo
+
+Transform commands create a backup under `backups/` before writing a changed Excel output. Restore the latest backed-up action into a new file under `outputs/`:
+
+```bash
+python -m src.main undo
+python -m src.main "undo last action"
+```
 
 ## LLM Upgrade
 
