@@ -30,6 +30,10 @@ OPERATOR_WORDS = {
 }
 
 TRAILING_FILE_REFERENCE = re.compile(r"\s+from\s+[^\s,;:)]+\.xlsx\b.*$", re.IGNORECASE)
+TRAILING_SHEET_REFERENCE = re.compile(
+    r"\s+(?:from|in|on)\s+(?:the\s+)?[A-Za-z0-9 _-]+?\s+(?:sheet|tab|worksheet)\b.*$",
+    re.IGNORECASE,
+)
 EXCEL_PATH_PATTERN = re.compile(
     r'"([^"]+\.xlsx)"|\'([^\']+\.xlsx)\'|([^\s,;:)]+\.xlsx)',
     re.IGNORECASE,
@@ -57,6 +61,7 @@ def _title_case(value):
 def _strip_file_reference(text):
     clean_text = TRAILING_FILE_REFERENCE.sub("", str(text or "")).strip()
     clean_text = EXCEL_PATH_PATTERN.sub("", clean_text).strip()
+    clean_text = TRAILING_SHEET_REFERENCE.sub("", clean_text).strip()
     return re.sub(r"\s+", " ", clean_text).strip(" ,.;:")
 
 

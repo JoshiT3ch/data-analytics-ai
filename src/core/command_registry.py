@@ -6,7 +6,9 @@ from src.commands.clean_excel import clean_duplicates
 from src.commands.create_chart import create_chart
 from src.commands.detect_columns import detect_columns
 from src.commands.generate_insights import generate_insights
+from src.commands.list_sheets import list_sheets
 from src.commands.remove_empty_rows import remove_empty_rows
+from src.commands.set_current_sheet import set_current_sheet
 from src.commands.summarize import summarize
 
 
@@ -51,6 +53,8 @@ COMMAND_REGISTRY = {
         "output_path": cleaned_output_path,
         "creates_backup": True,
         "supports_preview": True,
+        "option_fields": ("sheet_name",),
+        "uses_session_file": True,
     },
     "summarize": {
         "function": summarize,
@@ -60,6 +64,8 @@ COMMAND_REGISTRY = {
         "output_path": summary_output_path,
         "creates_backup": False,
         "supports_preview": False,
+        "option_fields": ("sheet_name",),
+        "uses_session_file": True,
     },
     "generate-insights": {
         "function": generate_insights,
@@ -69,7 +75,7 @@ COMMAND_REGISTRY = {
         "output_path": insights_output_path,
         "creates_backup": False,
         "supports_preview": False,
-        "option_fields": ("target_column", "group_by"),
+        "option_fields": ("target_column", "group_by", "sheet_name"),
         "uses_session_file": True,
     },
     "build-dashboard": {
@@ -80,7 +86,7 @@ COMMAND_REGISTRY = {
         "output_path": dashboard_output_path,
         "creates_backup": False,
         "supports_preview": False,
-        "option_fields": ("target_column", "group_by"),
+        "option_fields": ("target_column", "group_by", "sheet_name"),
         "uses_session_file": True,
     },
     "remove-empty-rows": {
@@ -91,6 +97,8 @@ COMMAND_REGISTRY = {
         "output_path": no_empty_output_path,
         "creates_backup": True,
         "supports_preview": False,
+        "option_fields": ("sheet_name",),
+        "uses_session_file": True,
     },
     "add-formula-column": {
         "function": add_formula_column,
@@ -100,7 +108,28 @@ COMMAND_REGISTRY = {
         "output_path": formula_output_path,
         "creates_backup": True,
         "supports_preview": True,
-        "option_fields": ("new_column", "left_column", "operator", "right_column"),
+        "option_fields": ("new_column", "left_column", "operator", "right_column", "sheet_name"),
+        "uses_session_file": True,
+    },
+    "list-sheets": {
+        "function": list_sheets,
+        "type": "analysis",
+        "produces_output": False,
+        "chainable_output": False,
+        "output_path": None,
+        "creates_backup": False,
+        "supports_preview": False,
+        "uses_session_file": True,
+    },
+    "set-current-sheet": {
+        "function": set_current_sheet,
+        "type": "session",
+        "produces_output": False,
+        "chainable_output": False,
+        "output_path": None,
+        "creates_backup": False,
+        "supports_preview": False,
+        "option_fields": ("sheet_name",),
         "uses_session_file": True,
     },
     "detect-columns": {
@@ -111,6 +140,8 @@ COMMAND_REGISTRY = {
         "output_path": None,
         "creates_backup": False,
         "supports_preview": False,
+        "option_fields": ("sheet_name",),
+        "uses_session_file": True,
     },
     "create-chart": {
         "function": create_chart,
@@ -120,7 +151,8 @@ COMMAND_REGISTRY = {
         "output_path": None,
         "creates_backup": False,
         "supports_preview": False,
-        "option_fields": ("chart_type", "x_column", "y_column", "title"),
+        "option_fields": ("chart_type", "x_column", "y_column", "title", "sheet_name"),
+        "uses_session_file": True,
     },
 }
 

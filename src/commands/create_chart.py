@@ -12,6 +12,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from src.core.session_memory import load_session_memory
+from src.core.workbook_manager import WorkbookError, read_sheet, resolve_sheet_name
+
 
 CHART_OUTPUT_DIR = Path("outputs") / "charts"
 SUPPORTED_CHART_TYPES = {"bar", "line", "pie", "histogram"}
@@ -131,7 +134,12 @@ def _plot_histogram(df, x_column, title, output_path):
     return None
 
 
-def create_chart(file_path, chart_type=None, x_column=None, y_column=None, title=None):
+def _session_sheet():
+    sheet_name = load_session_memory().get("current_sheet")
+    return sheet_name if isinstance(sheet_name, str) and sheet_name else None
+
+
+def create_chart(file_path, chart_type=None, x_column=None, y_column=None, title=None, sheet_name=None):
     """Create a chart image from an Excel file."""
     if not file_path:
         message = "No input file provided and no current session file found."
@@ -163,7 +171,20 @@ def create_chart(file_path, chart_type=None, x_column=None, y_column=None, title
         }
 
     try:
-        df = pd.read_excel(source)
+        resolved_sheet = resolve_sheet_name(
+            file_path,
+            requested_sheet=sheet_name,
+            session_sheet=_session_sheet(),
+        )
+        df = read_sheet(source, resolved_sheet)
+    except WorkbookError as error:
+        message = str(error)
+        print(message)
+        return {
+            "status": "error",
+            "output_file": None,
+            "message": message,
+        }
     except ValueError as error:
         message = f"Invalid file: {error}"
         print(message)
@@ -248,6 +269,7 @@ def create_chart(file_path, chart_type=None, x_column=None, y_column=None, title
 
     message = f"Chart created successfully: {output_path}"
     print(message)
+    print(f"Sheet used: {resolved_sheet}")
     return {
         "status": "success",
         "output_file": output_path,
@@ -257,6 +279,7 @@ def create_chart(file_path, chart_type=None, x_column=None, y_column=None, title
         "x_column": str(matched_x_column),
         "y_column": str(matched_y_column) if matched_y_column else None,
         "title": title,
+        "sheet_name": resolved_sheet,
     }
 
 

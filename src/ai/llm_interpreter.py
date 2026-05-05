@@ -32,6 +32,17 @@ EXCEL_PATH_PATTERN = re.compile(
     re.IGNORECASE,
 )
 COMMAND_PATTERNS = {
+    "list-sheets": [
+        r"\blist sheets\b",
+        r"\bshow sheets\b",
+        r"\blist tabs\b",
+        r"\bshow tabs\b",
+        r"\bworkbook tabs\b",
+    ],
+    "set-current-sheet": [
+        r"\buse\s+(?:the\s+)?[a-z0-9 _-]+?\s+(?:sheet|tab)\b",
+        r"\bset current sheet\b",
+    ],
     "add-formula-column": [
         r"\badd a formula column\b",
         r"\bcreate a formula column\b",
@@ -112,11 +123,14 @@ COMMAND_PATTERNS = {
 CHART_OPTION_FIELDS = ("chart_type", "x_column", "y_column", "title")
 INSIGHT_OPTION_FIELDS = ("target_column", "group_by")
 FORMULA_OPTION_FIELDS = ("new_column", "left_column", "operator", "right_column")
+SHEET_OPTION_FIELDS = ("sheet_name",)
 SESSION_FILE_COMMANDS = {
     "create-chart",
     "generate-insights",
     "build-dashboard",
     "add-formula-column",
+    "list-sheets",
+    "set-current-sheet",
 }
 DASHBOARD_OPTION_FIELDS = ("target_column", "group_by")
 DASHBOARD_PATTERNS = COMMAND_PATTERNS["build-dashboard"]
@@ -152,6 +166,11 @@ def _normalize_file_path(file_path):
     return f"data/raw/{clean_path}"
 
 
+def _title_case(value):
+    words = re.findall(r"[A-Za-z0-9_-]+", str(value or ""))
+    return " ".join(word.capitalize() for word in words)
+
+
 def _extract_file_path(user_input):
     if not isinstance(user_input, str):
         return None
@@ -162,6 +181,28 @@ def _extract_file_path(user_input):
 
     raw_path = next((group for group in match.groups() if group), None)
     return _normalize_file_path(raw_path)
+
+
+def _extract_sheet_name(user_input):
+    if not isinstance(user_input, str):
+        return None
+
+    text = EXCEL_PATH_PATTERN.sub("", user_input).strip()
+    patterns = [
+        r"\bset current sheet to\s+(?:the\s+)?(?P<sheet>[A-Za-z0-9 _-]+?)(?:\s+(?:sheet|tab))?(?:\s+(?:from|in|on)\b|$)",
+        r"\buse\s+(?:the\s+)?(?P<sheet>[A-Za-z0-9 _-]+?)\s+(?:sheet|tab)\b",
+        r"\b(?:summarize|summarise|describe|analyze|analyse)\s+(?:the\s+)?(?P<sheet>[A-Za-z0-9 _-]+?)\s+(?:sheet|tab)\b",
+        r"\b(?:from|in|on)\s+(?:the\s+)?(?P<sheet>[A-Za-z0-9 _-]+?)\s+(?:sheet|tab)\b",
+        r"\b(?:from|in|on)\s+(?:the\s+)?(?P<sheet>[A-Za-z0-9 _-]+?)\s+(?:worksheet)\b",
+        r"\b(?:the\s+)?(?P<sheet>[A-Za-z0-9 _-]+?)\s+(?:sheet|tab)\b",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            return _title_case(match.group("sheet").strip())
+
+    return None
 
 
 def _default_file_path():
@@ -250,6 +291,7 @@ def _file_path_for_command(command, user_input):
 
 def _fallback_plan(user_input, reason):
     safe_input = user_input if isinstance(user_input, str) else ""
+    requested_sheet = _extract_sheet_name(safe_input)
     dashboard_request = _is_dashboard_request(safe_input)
     insight_request = _is_insight_request(safe_input)
     formula_request = parse_formula_request(safe_input)
@@ -263,6 +305,7 @@ def _fallback_plan(user_input, reason):
         formula_request.update(
             {
                 "file_path": file_path,
+                "sheet_name": requested_sheet,
                 "confidence": 0.75 if file_path else 0.35,
                 "reason": reason,
             }
@@ -274,6 +317,7 @@ def _fallback_plan(user_input, reason):
         chart_request.update(
             {
                 "file_path": file_path,
+                "sheet_name": requested_sheet,
                 "confidence": 0.7 if file_path else 0.35,
                 "reason": reason,
             }
@@ -301,14 +345,15 @@ def _fallback_plan(user_input, reason):
 
     for index, command in enumerate(commands):
         step_file_path = current_file_path or _file_path_for_command(command, safe_input)
-        plan.append(
-            {
-                "command": command,
-                "file_path": step_file_path,
-                "confidence": 0.65 if _extract_file_path(safe_input) else 0.35,
-                "reason": reason if index == 0 else "Chained from previous step.",
-            }
-        )
+        step = {
+            "command": command,
+            "file_path": step_file_path,
+            "confidence": 0.65 if _extract_file_path(safe_input) else 0.35,
+            "reason": reason if index == 0 else "Chained from previous step.",
+        }
+        if requested_sheet:
+            step["sheet_name"] = requested_sheet
+        plan.append(step)
 
         predicted_output = _predict_output_file(command, step_file_path)
         if predicted_output:
@@ -336,8 +381,9 @@ Always return this JSON object:
 {
   "steps": [
     {
-      "command": "clean-duplicates | summarize | remove-empty-rows | detect-columns | create-chart | generate-insights | build-dashboard | add-formula-column",
+      "command": "clean-duplicates | summarize | remove-empty-rows | detect-columns | create-chart | generate-insights | build-dashboard | add-formula-column | list-sheets | set-current-sheet",
       "file_path": "data/raw/<filename>.xlsx or null",
+      "sheet_name": "worksheet/tab name, or null",
       "chart_type": "bar | line | pie | histogram",
       "x_column": "column name for x/category/value",
       "y_column": "column name for numeric value, or null",
@@ -363,14 +409,16 @@ Supported command values:
 - generate-insights: generate a human-readable data analysis report with overview, statistics, key findings, patterns, trends, and recommendations.
 - build-dashboard: create a dashboard folder and Excel dashboard report combining summary, charts, insights, and a data preview.
 - add-formula-column: add a calculated column to an Excel workbook using two existing columns and an operator.
+- list-sheets: list all worksheet tabs in an Excel workbook.
+- set-current-sheet: store the current workbook and sheet in session memory.
 
 Strict rules:
-- Every command must be exactly one of: clean-duplicates, summarize, remove-empty-rows, detect-columns, create-chart, generate-insights, build-dashboard, add-formula-column.
-- Every file_path must be a non-empty .xlsx path, except create-chart, generate-insights, build-dashboard, and add-formula-column may use null when the user did not provide a file.
+- Every command must be exactly one of: clean-duplicates, summarize, remove-empty-rows, detect-columns, create-chart, generate-insights, build-dashboard, add-formula-column, list-sheets, set-current-sheet.
+- Every file_path must be a non-empty .xlsx path, except create-chart, generate-insights, build-dashboard, add-formula-column, list-sheets, and set-current-sheet may use null when the user did not provide a file.
 - A single-step request must still return a steps array with one object.
 - If the user provides only a filename like test.xlsx, return data/raw/test.xlsx.
 - If the user provides a path like data/raw/test.xlsx or C:\\data\\test.xlsx, keep that path.
-- If no .xlsx file is mentioned for create-chart, generate-insights, build-dashboard, or add-formula-column, use null.
+- If no .xlsx file is mentioned for create-chart, generate-insights, build-dashboard, add-formula-column, list-sheets, or set-current-sheet, use null.
 - If no .xlsx file is mentioned for any other command, use data/raw/test.xlsx.
 - Preserve the requested order of operations.
 - If one step creates a cleaned Excel output, use that output file for the next step.
@@ -388,6 +436,9 @@ Strict rules:
 - For "profit using revenue minus cost", set new_column "Profit", left_column "Revenue", operator "-", and right_column "Cost".
 - For "total with quantity times price", set new_column "Total", left_column "Quantity", operator "*", and right_column "Price".
 - For "profit margin from revenue and cost", set new_column "Profit Margin", left_column "Profit", operator "/", and right_column "Revenue".
+- For "list sheets", "show sheets", "list tabs", "show tabs", or "workbook tabs", use command "list-sheets".
+- For "use the Sales sheet" or "set current sheet to Sales", use command "set-current-sheet" and set sheet_name "Sales".
+- If the user mentions "from the Sales sheet", "in the Sales tab", or similar, set sheet_name to that sheet for the command.
 - confidence must be a number between 0 and 1.
 - reason must be short and must not contain Markdown.
 """.strip()
@@ -453,6 +504,7 @@ def normalize_plan(interpreted_request, user_input=None):
         return []
 
     source_file_path = _extract_file_path(user_input)
+    source_sheet_name = _extract_sheet_name(user_input)
     parsed_chart_request = parse_chart_request(user_input)
     plan = []
     current_file_path = None
@@ -488,6 +540,10 @@ def normalize_plan(interpreted_request, user_input=None):
             "confidence": _get_confidence(raw_step.get("confidence")),
             "reason": str(raw_step.get("reason") or "Parsed request.").strip(),
         }
+
+        raw_sheet_name = raw_step.get("sheet_name") or source_sheet_name
+        if raw_sheet_name:
+            step["sheet_name"] = str(raw_sheet_name).strip()
 
         if command == "create-chart":
             chart_defaults = parsed_chart_request or {}

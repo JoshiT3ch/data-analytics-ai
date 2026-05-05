@@ -78,11 +78,14 @@ def format_execution_plan(plan):
     for row in _plan_rows(plan):
         lines.append(f"Step {row['step']}: {row['command']}")
         lines.append(f"Input: {row['input_file'] or 'not provided'}")
+        step = row.get("step_data") or {}
+
+        if step.get("sheet_name"):
+            lines.append(f"Sheet: {step.get('sheet_name')}")
 
         if row["output_file"]:
             lines.append(f"Output: {row['output_file']}")
 
-        step = row.get("step_data") or {}
         if step.get("chart_type"):
             lines.append(f"Chart: {step.get('chart_type')}")
             lines.append(f"X column: {step.get('x_column') or 'not provided'}")

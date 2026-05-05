@@ -4,6 +4,12 @@ import re
 import pandas as pd
 
 from src.core.session_memory import load_session_memory
+from src.core.workbook_manager import (
+    WorkbookError,
+    read_sheet,
+    resolve_sheet_name,
+    write_sheet_to_workbook,
+)
 
 
 SUPPORTED_OPERATORS = {
@@ -35,6 +41,13 @@ def _current_session_file():
     current_file = load_session_memory().get("current_file")
     if isinstance(current_file, str) and current_file.lower().endswith(".xlsx"):
         return current_file
+    return None
+
+
+def _current_session_sheet():
+    current_sheet = load_session_memory().get("current_sheet")
+    if isinstance(current_sheet, str) and current_sheet:
+        return current_sheet
     return None
 
 
@@ -162,6 +175,7 @@ def add_formula_column(
     operator=None,
     right_column=None,
     preview=False,
+    sheet_name=None,
 ):
     """Add a calculated column to an Excel file."""
     file_path = file_path or _current_session_file()
@@ -185,7 +199,20 @@ def add_formula_column(
         }
 
     try:
-        df = pd.read_excel(source)
+        resolved_sheet = resolve_sheet_name(
+            file_path,
+            requested_sheet=sheet_name,
+            session_sheet=_current_session_sheet(),
+        )
+        df = read_sheet(source, resolved_sheet)
+    except WorkbookError as error:
+        message = str(error)
+        print(message)
+        return {
+            "status": "error",
+            "output_file": None,
+            "message": message,
+        }
     except ValueError as error:
         message = f"Invalid file: {error}"
         print(message)
@@ -224,6 +251,7 @@ def add_formula_column(
         print("Preview only:")
         print("- Command: add-formula-column")
         print(f"- File: {file_path}")
+        print(f"- Sheet: {resolved_sheet}")
         print(f"- New column: {new_column}")
         print(f"- Formula: {formula}")
         print("- No changes were applied.")
@@ -235,15 +263,17 @@ def add_formula_column(
             "preview": True,
             "new_column": str(new_column),
             "formula": formula,
+            "sheet_name": resolved_sheet,
         }
 
     left_series, right_series = operands
     df[str(new_column)] = _calculate(left_series, normalized_operator, right_series)
     output_file = output_path_for_formula(file_path, new_column)
-    df.to_excel(output_file, index=False)
+    write_sheet_to_workbook(file_path, output_file, resolved_sheet, df)
 
     message = "Formula column added successfully."
     print(message)
+    print(f"- Sheet: {resolved_sheet}")
     print(f"- New column: {new_column}")
     print(f"- Formula: {formula}")
     print(f"- Output saved to: {output_file}")
@@ -258,4 +288,5 @@ def add_formula_column(
         "right_column": str(matched_right),
         "formula": formula,
         "affected_rows": int(len(df)),
+        "sheet_name": resolved_sheet,
     }

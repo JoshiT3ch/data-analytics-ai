@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 from src.commands.generate_insights import _build_report
 from src.commands.summarize import _build_summary
 from src.core.session_memory import load_session_memory
+from src.core.workbook_manager import WorkbookError, read_sheet, resolve_sheet_name
 
 
 DASHBOARD_OUTPUT_DIR = Path("outputs") / "dashboards"
@@ -64,9 +65,18 @@ def _current_session_file():
     return None
 
 
-def _dashboard_dir(file_path):
+def _current_session_sheet():
+    current_sheet = load_session_memory().get("current_sheet")
+    if isinstance(current_sheet, str) and current_sheet:
+        return current_sheet
+    return None
+
+
+def _dashboard_dir(file_path, sheet_name=None):
     source = Path(file_path)
     DASHBOARD_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    if sheet_name:
+        return DASHBOARD_OUTPUT_DIR / f"{source.stem}_{_slugify(sheet_name)}_dashboard"
     return DASHBOARD_OUTPUT_DIR / f"{source.stem}_dashboard"
 
 
@@ -391,9 +401,10 @@ def _write_excel_report(report_path, df, summary, insights, findings, recommenda
         pass
 
 
-def _build_manifest(file_path, dashboard_dir, summary_file, insights_file, report_file, charts):
+def _build_manifest(file_path, sheet_name, dashboard_dir, summary_file, insights_file, report_file, charts):
     return {
         "source_file": str(file_path),
+        "sheet_name": sheet_name,
         "dashboard_dir": dashboard_dir.as_posix(),
         "summary_file": summary_file.as_posix(),
         "insights_file": insights_file.as_posix(),
@@ -402,7 +413,7 @@ def _build_manifest(file_path, dashboard_dir, summary_file, insights_file, repor
     }
 
 
-def build_dashboard(file_path, target_column=None, group_by=None):
+def build_dashboard(file_path, target_column=None, group_by=None, sheet_name=None):
     """Build a dashboard folder with summary, insights, charts, and an Excel report."""
     file_path = file_path or _current_session_file()
     if not file_path:
@@ -425,7 +436,20 @@ def build_dashboard(file_path, target_column=None, group_by=None):
         }
 
     try:
-        df = pd.read_excel(source)
+        resolved_sheet = resolve_sheet_name(
+            file_path,
+            requested_sheet=sheet_name,
+            session_sheet=_current_session_sheet(),
+        )
+        df = read_sheet(source, resolved_sheet)
+    except WorkbookError as error:
+        message = str(error)
+        print(message)
+        return {
+            "status": "error",
+            "output_file": None,
+            "message": message,
+        }
     except ValueError as error:
         message = f"Invalid file: {error}"
         print(message)
@@ -443,7 +467,7 @@ def build_dashboard(file_path, target_column=None, group_by=None):
             "message": message,
         }
 
-    dashboard_dir = _dashboard_dir(file_path)
+    dashboard_dir = _dashboard_dir(file_path, resolved_sheet if sheet_name else None)
     dashboard_dir.mkdir(parents=True, exist_ok=True)
     summary_file = dashboard_dir / "summary.txt"
     insights_file = dashboard_dir / "insights.txt"
@@ -469,6 +493,7 @@ def build_dashboard(file_path, target_column=None, group_by=None):
     _write_excel_report(report_file, df, summary, insights, findings, recommendations, charts)
     manifest = _build_manifest(
         file_path,
+        resolved_sheet,
         dashboard_dir,
         summary_file,
         insights_file,
@@ -480,6 +505,7 @@ def build_dashboard(file_path, target_column=None, group_by=None):
     message = f"Dashboard built successfully: {dashboard_dir.as_posix()}"
     print(message)
     print(f"Dashboard report: {report_file.as_posix()}")
+    print(f"Sheet used: {resolved_sheet}")
     print("")
     print("Dashboard Summary:")
     print(f"- Rows: {len(df)}")
@@ -498,4 +524,5 @@ def build_dashboard(file_path, target_column=None, group_by=None):
         "insights_file": insights_file.as_posix(),
         "manifest_file": manifest_file.as_posix(),
         "charts": charts,
+        "sheet_name": resolved_sheet,
     }

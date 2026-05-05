@@ -4,6 +4,7 @@ import re
 import pandas as pd
 
 from src.core.session_memory import load_session_memory
+from src.core.workbook_manager import WorkbookError, read_sheet, resolve_sheet_name
 
 
 INSIGHTS_OUTPUT_DIR = Path("outputs") / "insights"
@@ -56,6 +57,13 @@ def _current_session_file():
     current_file = load_session_memory().get("current_file")
     if isinstance(current_file, str) and current_file.lower().endswith(".xlsx"):
         return current_file
+    return None
+
+
+def _current_session_sheet():
+    current_sheet = load_session_memory().get("current_sheet")
+    if isinstance(current_sheet, str) and current_sheet:
+        return current_sheet
     return None
 
 
@@ -442,7 +450,7 @@ def _build_report(df, file_path, target_column=None, group_by=None):
     return "\n".join(lines), findings, recommendations
 
 
-def generate_insights(file_path, target_column=None, group_by=None):
+def generate_insights(file_path, target_column=None, group_by=None, sheet_name=None):
     """Generate a rule-based data insight report from an Excel file."""
     file_path = file_path or _current_session_file()
     if not file_path:
@@ -465,7 +473,20 @@ def generate_insights(file_path, target_column=None, group_by=None):
         }
 
     try:
-        df = pd.read_excel(source)
+        resolved_sheet = resolve_sheet_name(
+            file_path,
+            requested_sheet=sheet_name,
+            session_sheet=_current_session_sheet(),
+        )
+        df = read_sheet(source, resolved_sheet)
+    except WorkbookError as error:
+        message = str(error)
+        print(message)
+        return {
+            "status": "error",
+            "output_file": None,
+            "message": message,
+        }
     except ValueError as error:
         message = f"Invalid file: {error}"
         print(message)
@@ -496,6 +517,7 @@ def generate_insights(file_path, target_column=None, group_by=None):
 
     message = f"Insights generated successfully: {output_path}"
     print(message)
+    print(f"Sheet used: {resolved_sheet}")
     print("")
     print("Key Findings:")
     for finding in findings[:5]:
@@ -512,4 +534,5 @@ def generate_insights(file_path, target_column=None, group_by=None):
         "result_summary": "Insights generated successfully.",
         "key_findings": findings,
         "recommendations": recommendations,
+        "sheet_name": resolved_sheet,
     }

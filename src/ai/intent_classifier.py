@@ -2,6 +2,18 @@ def classify_intent(user_input):
     text = user_input.lower()
 
     if (
+        "list sheets" in text
+        or "show sheets" in text
+        or "list tabs" in text
+        or "show tabs" in text
+        or "workbook tabs" in text
+    ):
+        return "list-sheets"
+
+    if "set current sheet" in text or ("use" in text and ("sheet" in text or "tab" in text)):
+        return "set-current-sheet"
+
+    if (
         "formula column" in text
         or "calculated column" in text
         or "calculate profit" in text

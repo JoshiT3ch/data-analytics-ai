@@ -149,7 +149,15 @@ def result_summary(result):
     return "Command completed."
 
 
-def record_command(command, input_file=None, output_file=None, summary=None, backup_file=None, metadata=None):
+def record_command(
+    command,
+    input_file=None,
+    output_file=None,
+    summary=None,
+    backup_file=None,
+    metadata=None,
+    sheet_name=None,
+):
     """Append a command entry and update the top-level current/last fields."""
     memory = load_session_memory()
     input_file = _as_string(input_file)
@@ -177,7 +185,7 @@ def record_command(command, input_file=None, output_file=None, summary=None, bac
     working_file = output_file if _is_excel_file(output_file) else input_file
     if _is_excel_file(working_file):
         memory["current_file"] = working_file
-        memory["current_sheet"] = _infer_sheet_name(working_file)
+        memory["current_sheet"] = sheet_name or _infer_sheet_name(working_file)
 
     memory["last_command"] = command
     memory["last_result_summary"] = summary
@@ -199,6 +207,7 @@ def record_result(command, input_file, result):
         summary=result_summary(result),
         backup_file=result.get("backup_file"),
         metadata=_safe_metadata(result),
+        sheet_name=result.get("sheet_name") or result.get("current_sheet"),
     )
 
 

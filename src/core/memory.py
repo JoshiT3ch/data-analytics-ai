@@ -46,6 +46,7 @@ def _sanitize_plan(plan):
         for key in (
             "command",
             "file_path",
+            "sheet_name",
             "chart_type",
             "x_column",
             "y_column",
