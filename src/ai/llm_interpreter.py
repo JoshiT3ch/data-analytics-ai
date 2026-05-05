@@ -31,6 +31,22 @@ EXCEL_PATH_PATTERN = re.compile(
     re.IGNORECASE,
 )
 COMMAND_PATTERNS = {
+    "generate-insights": [
+        r"\bgive me insights\b",
+        r"\bgenerate insights\b",
+        r"\binsights\b",
+        r"\banalyze this dataset\b",
+        r"\banalyse this dataset\b",
+        r"\banalyze trends\b",
+        r"\banalyse trends\b",
+        r"\bfind patterns\b",
+        r"\bfind recommendations\b",
+        r"\brecommendations\b",
+        r"\bexplain this dataset\b",
+        r"\bwhat does this data mean\b",
+        r"\bdata analysis report\b",
+        r"\bbusiness insights\b",
+    ],
     "create-chart": [
         r"\bchart\b",
         r"\bgraph\b",
@@ -72,6 +88,9 @@ COMMAND_PATTERNS = {
     ],
 }
 CHART_OPTION_FIELDS = ("chart_type", "x_column", "y_column", "title")
+INSIGHT_OPTION_FIELDS = ("target_column", "group_by")
+SESSION_FILE_COMMANDS = {"create-chart", "generate-insights"}
+INSIGHT_PATTERNS = COMMAND_PATTERNS["generate-insights"]
 
 
 def _safe_print(*values):
@@ -180,11 +199,26 @@ def _find_command_mentions(user_input):
     return [command for _, command in mentions]
 
 
+def _is_insight_request(user_input):
+    text = str(user_input or "").lower()
+    return any(re.search(pattern, text) for pattern in INSIGHT_PATTERNS)
+
+
+def _file_path_for_command(command, user_input):
+    explicit_file = _extract_file_path(user_input)
+
+    if command in SESSION_FILE_COMMANDS:
+        return explicit_file or _current_session_file()
+
+    return explicit_file or _default_file_path()
+
+
 def _fallback_plan(user_input, reason):
     safe_input = user_input if isinstance(user_input, str) else ""
-    chart_request = parse_chart_request(safe_input)
+    insight_request = _is_insight_request(safe_input)
+    chart_request = None if insight_request else parse_chart_request(safe_input)
     if chart_request:
-        file_path = _extract_file_path(safe_input) or _current_session_file()
+        file_path = _file_path_for_command("create-chart", safe_input)
         chart_request.update(
             {
                 "file_path": file_path,
@@ -194,18 +228,25 @@ def _fallback_plan(user_input, reason):
         )
         return [chart_request]
 
-    file_path = _extract_file_path(safe_input) or _default_file_path()
+    file_path = _extract_file_path(safe_input)
     commands = _find_command_mentions(safe_input)
+
+    if insight_request:
+        commands = [
+            command
+            for command in commands
+            if command not in {"create-chart", "summarize"}
+        ] or ["generate-insights"]
 
     if not commands:
         classified_command = classify_intent(safe_input)
         commands = [classified_command] if classified_command in SUPPORTED_COMMANDS else [DEFAULT_COMMAND]
 
     plan = []
-    current_file_path = file_path
+    current_file_path = file_path or _file_path_for_command(commands[0], safe_input)
 
     for index, command in enumerate(commands):
-        step_file_path = current_file_path or file_path
+        step_file_path = current_file_path or _file_path_for_command(command, safe_input)
         plan.append(
             {
                 "command": command,
@@ -241,12 +282,14 @@ Always return this JSON object:
 {
   "steps": [
     {
-      "command": "clean-duplicates | summarize | remove-empty-rows | detect-columns | create-chart",
+      "command": "clean-duplicates | summarize | remove-empty-rows | detect-columns | create-chart | generate-insights",
       "file_path": "data/raw/<filename>.xlsx or null",
       "chart_type": "bar | line | pie | histogram",
       "x_column": "column name for x/category/value",
       "y_column": "column name for numeric value, or null",
       "title": "short chart title",
+      "target_column": "optional numeric column for insights, or null",
+      "group_by": "optional category column for insights, or null",
       "confidence": 0.0,
       "reason": "short explanation"
     }
@@ -259,14 +302,15 @@ Supported command values:
 - remove-empty-rows: remove blank rows or empty rows from an Excel file.
 - detect-columns: show columns, data types, schema, structure, or fields.
 - create-chart: create a bar, line, pie, or histogram chart image from an Excel file.
+- generate-insights: generate a human-readable data analysis report with overview, statistics, key findings, patterns, trends, and recommendations.
 
 Strict rules:
-- Every command must be exactly one of: clean-duplicates, summarize, remove-empty-rows, detect-columns, create-chart.
-- Every file_path must be a non-empty .xlsx path, except create-chart may use null when the user did not provide a file.
+- Every command must be exactly one of: clean-duplicates, summarize, remove-empty-rows, detect-columns, create-chart, generate-insights.
+- Every file_path must be a non-empty .xlsx path, except create-chart and generate-insights may use null when the user did not provide a file.
 - A single-step request must still return a steps array with one object.
 - If the user provides only a filename like test.xlsx, return data/raw/test.xlsx.
 - If the user provides a path like data/raw/test.xlsx or C:\\data\\test.xlsx, keep that path.
-- If no .xlsx file is mentioned for create-chart, use null.
+- If no .xlsx file is mentioned for create-chart or generate-insights, use null.
 - If no .xlsx file is mentioned for any other command, use data/raw/test.xlsx.
 - Preserve the requested order of operations.
 - If one step creates a cleaned Excel output, use that output file for the next step.
@@ -277,6 +321,7 @@ Strict rules:
 - For histograms, set chart_type, x_column, y_column as null, and title.
 - For "sales by category", use x_column "Category" and y_column "Sales".
 - For "revenue trend by month", use chart_type "line", x_column "Month", y_column "Revenue", and title "Revenue Trend by Month".
+- For "give me insights", "analyze trends", "find patterns", "find recommendations", "explain this dataset", "what does this data mean", "data analysis report", or "business insights", use command "generate-insights".
 - confidence must be a number between 0 and 1.
 - reason must be short and must not contain Markdown.
 """.strip()
@@ -356,19 +401,19 @@ def normalize_plan(interpreted_request, user_input=None):
 
         raw_file_path = _normalize_file_path(raw_step.get("file_path"))
         if index == 0:
-            if command == "create-chart":
+            if command in SESSION_FILE_COMMANDS:
                 file_path = raw_file_path or source_file_path or _current_session_file()
             else:
                 file_path = raw_file_path or source_file_path or _default_file_path()
         elif current_file_path:
             file_path = current_file_path
         else:
-            if command == "create-chart":
+            if command in SESSION_FILE_COMMANDS:
                 file_path = source_file_path or _current_session_file()
             else:
                 file_path = source_file_path or _default_file_path()
 
-        if not file_path and command != "create-chart":
+        if not file_path and command not in SESSION_FILE_COMMANDS:
             return []
 
         step = {
@@ -385,6 +430,11 @@ def normalize_plan(interpreted_request, user_input=None):
                 if value in (None, ""):
                     value = chart_defaults.get(field)
                 step[field] = value
+        elif command == "generate-insights":
+            for field in INSIGHT_OPTION_FIELDS:
+                value = raw_step.get(field)
+                if value not in (None, ""):
+                    step[field] = value
 
         plan.append(step)
 

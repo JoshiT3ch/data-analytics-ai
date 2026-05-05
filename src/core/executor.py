@@ -8,7 +8,7 @@ from src.core.backup_manager import create_backup
 from src.core.command_registry import COMMANDS, get_command_metadata
 from src.core.memory import update_memory_after_step
 from src.core.router import route_command
-from src.core.session_memory import record_result
+from src.core.session_memory import load_session_memory, record_result
 
 
 RAW_DATA_DIR = os.path.join("data", "raw")
@@ -145,12 +145,39 @@ def _validate_step_shape(step, index, has_current_file):
 
     file_path = step.get("file_path")
     if not file_path and not has_current_file:
+        if _command_uses_session_file(command):
+            return None
         if command == "create-chart":
             return "No input file provided and no current session file found."
         return f"Step {index} is missing a file_path and there is no previous output to use."
 
     if file_path is not None and not isinstance(file_path, str):
         return f"Step {index} has an invalid file_path."
+
+    return None
+
+
+def _session_current_file():
+    current_file = load_session_memory().get("current_file")
+    if isinstance(current_file, str) and current_file.lower().endswith(".xlsx"):
+        return current_file
+    return None
+
+
+def _command_uses_session_file(command):
+    return bool((get_command_metadata(command) or {}).get("uses_session_file"))
+
+
+def _validate_step_file_availability(step, index, has_current_file):
+    file_path = step.get("file_path")
+    if file_path or has_current_file:
+        return None
+
+    command = step.get("command")
+    if _command_uses_session_file(command):
+        if _session_current_file():
+            return None
+        return "No input file provided and no current session file found."
 
     return None
 
@@ -167,6 +194,12 @@ def _resolve_step_file(step, current_file_path, warnings):
             f"Using chained file {current_file_path} instead of requested {requested_file_path}."
         )
         return current_file_path
+
+    if not requested_file_path and _command_uses_session_file(step.get("command")):
+        session_file = _session_current_file()
+        if session_file:
+            warnings.append(f"Using current session file: {session_file}")
+            return session_file
 
     return requested_file_path or current_file_path
 
@@ -234,6 +267,14 @@ def execute_plan(plan, dry_run=False, debug=False, preview=False):
         shape_error = _validate_step_shape(step, index, current_file_path is not None)
         if shape_error:
             return _error_result(shape_error, results, index, log_data, write_logs)
+
+        availability_error = _validate_step_file_availability(
+            step,
+            index,
+            current_file_path is not None,
+        )
+        if availability_error:
+            return _error_result(availability_error, results, index, log_data, write_logs)
 
         command = step["command"]
         metadata = get_command_metadata(command) or {}

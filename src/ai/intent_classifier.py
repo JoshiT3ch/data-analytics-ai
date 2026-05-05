@@ -2,6 +2,22 @@ def classify_intent(user_input):
     text = user_input.lower()
 
     if (
+        "insight" in text
+        or "analyze trends" in text
+        or "analyse trends" in text
+        or "analyze this dataset" in text
+        or "analyse this dataset" in text
+        or "find patterns" in text
+        or "find recommendations" in text
+        or "recommendations" in text
+        or "explain this dataset" in text
+        or "what does this data mean" in text
+        or "data analysis report" in text
+        or "business insights" in text
+    ):
+        return "generate-insights"
+
+    if (
         "chart" in text
         or "graph" in text
         or "visualize" in text
