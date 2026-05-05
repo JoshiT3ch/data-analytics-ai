@@ -2,6 +2,13 @@ def classify_intent(user_input):
     text = user_input.lower()
 
     if (
+        "dashboard" in text
+        or "dashboard report" in text
+        or "auto dashboard" in text
+    ):
+        return "build-dashboard"
+
+    if (
         "insight" in text
         or "analyze trends" in text
         or "analyse trends" in text

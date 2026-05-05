@@ -1,5 +1,6 @@
 import os
 
+from src.commands.build_dashboard import build_dashboard
 from src.commands.clean_excel import clean_duplicates
 from src.commands.create_chart import create_chart
 from src.commands.detect_columns import detect_columns
@@ -31,6 +32,11 @@ def insights_output_path(file_path):
     return f"outputs/insights/{file_name}_insights.txt"
 
 
+def dashboard_output_path(file_path):
+    file_name = os.path.splitext(os.path.basename(file_path))[0]
+    return f"outputs/dashboards/{file_name}_dashboard"
+
+
 COMMAND_REGISTRY = {
     "clean-duplicates": {
         "function": clean_duplicates,
@@ -56,6 +62,17 @@ COMMAND_REGISTRY = {
         "produces_output": True,
         "chainable_output": False,
         "output_path": insights_output_path,
+        "creates_backup": False,
+        "supports_preview": False,
+        "option_fields": ("target_column", "group_by"),
+        "uses_session_file": True,
+    },
+    "build-dashboard": {
+        "function": build_dashboard,
+        "type": "analysis",
+        "produces_output": True,
+        "chainable_output": False,
+        "output_path": dashboard_output_path,
         "creates_backup": False,
         "supports_preview": False,
         "option_fields": ("target_column", "group_by"),

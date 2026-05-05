@@ -31,6 +31,15 @@ EXCEL_PATH_PATTERN = re.compile(
     re.IGNORECASE,
 )
 COMMAND_PATTERNS = {
+    "build-dashboard": [
+        r"\bbuild dashboard\b",
+        r"\bcreate dashboard\b",
+        r"\bgenerate dashboard\b",
+        r"\bauto dashboard\b",
+        r"\bdashboard report\b",
+        r"\bdashboard\b",
+        r"\bcombine summary\b.*\bcharts\b.*\binsights\b",
+    ],
     "generate-insights": [
         r"\bgive me insights\b",
         r"\bgenerate insights\b",
@@ -89,7 +98,9 @@ COMMAND_PATTERNS = {
 }
 CHART_OPTION_FIELDS = ("chart_type", "x_column", "y_column", "title")
 INSIGHT_OPTION_FIELDS = ("target_column", "group_by")
-SESSION_FILE_COMMANDS = {"create-chart", "generate-insights"}
+SESSION_FILE_COMMANDS = {"create-chart", "generate-insights", "build-dashboard"}
+DASHBOARD_OPTION_FIELDS = ("target_column", "group_by")
+DASHBOARD_PATTERNS = COMMAND_PATTERNS["build-dashboard"]
 INSIGHT_PATTERNS = COMMAND_PATTERNS["generate-insights"]
 
 
@@ -204,6 +215,11 @@ def _is_insight_request(user_input):
     return any(re.search(pattern, text) for pattern in INSIGHT_PATTERNS)
 
 
+def _is_dashboard_request(user_input):
+    text = str(user_input or "").lower()
+    return any(re.search(pattern, text) for pattern in DASHBOARD_PATTERNS)
+
+
 def _file_path_for_command(command, user_input):
     explicit_file = _extract_file_path(user_input)
 
@@ -215,8 +231,9 @@ def _file_path_for_command(command, user_input):
 
 def _fallback_plan(user_input, reason):
     safe_input = user_input if isinstance(user_input, str) else ""
+    dashboard_request = _is_dashboard_request(safe_input)
     insight_request = _is_insight_request(safe_input)
-    chart_request = None if insight_request else parse_chart_request(safe_input)
+    chart_request = None if dashboard_request or insight_request else parse_chart_request(safe_input)
     if chart_request:
         file_path = _file_path_for_command("create-chart", safe_input)
         chart_request.update(
@@ -231,7 +248,9 @@ def _fallback_plan(user_input, reason):
     file_path = _extract_file_path(safe_input)
     commands = _find_command_mentions(safe_input)
 
-    if insight_request:
+    if dashboard_request:
+        commands = ["build-dashboard"]
+    elif insight_request:
         commands = [
             command
             for command in commands
@@ -282,7 +301,7 @@ Always return this JSON object:
 {
   "steps": [
     {
-      "command": "clean-duplicates | summarize | remove-empty-rows | detect-columns | create-chart | generate-insights",
+      "command": "clean-duplicates | summarize | remove-empty-rows | detect-columns | create-chart | generate-insights | build-dashboard",
       "file_path": "data/raw/<filename>.xlsx or null",
       "chart_type": "bar | line | pie | histogram",
       "x_column": "column name for x/category/value",
@@ -303,14 +322,15 @@ Supported command values:
 - detect-columns: show columns, data types, schema, structure, or fields.
 - create-chart: create a bar, line, pie, or histogram chart image from an Excel file.
 - generate-insights: generate a human-readable data analysis report with overview, statistics, key findings, patterns, trends, and recommendations.
+- build-dashboard: create a dashboard folder and Excel dashboard report combining summary, charts, insights, and a data preview.
 
 Strict rules:
-- Every command must be exactly one of: clean-duplicates, summarize, remove-empty-rows, detect-columns, create-chart, generate-insights.
-- Every file_path must be a non-empty .xlsx path, except create-chart and generate-insights may use null when the user did not provide a file.
+- Every command must be exactly one of: clean-duplicates, summarize, remove-empty-rows, detect-columns, create-chart, generate-insights, build-dashboard.
+- Every file_path must be a non-empty .xlsx path, except create-chart, generate-insights, and build-dashboard may use null when the user did not provide a file.
 - A single-step request must still return a steps array with one object.
 - If the user provides only a filename like test.xlsx, return data/raw/test.xlsx.
 - If the user provides a path like data/raw/test.xlsx or C:\\data\\test.xlsx, keep that path.
-- If no .xlsx file is mentioned for create-chart or generate-insights, use null.
+- If no .xlsx file is mentioned for create-chart, generate-insights, or build-dashboard, use null.
 - If no .xlsx file is mentioned for any other command, use data/raw/test.xlsx.
 - Preserve the requested order of operations.
 - If one step creates a cleaned Excel output, use that output file for the next step.
@@ -322,6 +342,7 @@ Strict rules:
 - For "sales by category", use x_column "Category" and y_column "Sales".
 - For "revenue trend by month", use chart_type "line", x_column "Month", y_column "Revenue", and title "Revenue Trend by Month".
 - For "give me insights", "analyze trends", "find patterns", "find recommendations", "explain this dataset", "what does this data mean", "data analysis report", or "business insights", use command "generate-insights".
+- For "dashboard", "build dashboard", "create dashboard", "auto dashboard", or "dashboard report", use command "build-dashboard".
 - confidence must be a number between 0 and 1.
 - reason must be short and must not contain Markdown.
 """.strip()
@@ -432,6 +453,11 @@ def normalize_plan(interpreted_request, user_input=None):
                 step[field] = value
         elif command == "generate-insights":
             for field in INSIGHT_OPTION_FIELDS:
+                value = raw_step.get(field)
+                if value not in (None, ""):
+                    step[field] = value
+        elif command == "build-dashboard":
+            for field in DASHBOARD_OPTION_FIELDS:
                 value = raw_step.get(field)
                 if value not in (None, ""):
                     step[field] = value
