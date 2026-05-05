@@ -15,6 +15,8 @@ A modular CLI-based data analytics tool that processes Excel files using structu
 - Preview mode for duplicate cleaning
 - Undo for the latest backed-up file-changing action
 - Chart generation for bar, line, pie, and histogram visualizations
+- Smart insights, dashboards, formula columns, and workbook sheet awareness
+- Local API bridge for a future Excel side chatbox
 
 ## Example Usage
 
@@ -41,6 +43,66 @@ python -m src.main "create a histogram of age from data/raw/test.xlsx"
 ```
 
 Charts are saved under `outputs/charts/`.
+
+### Workbook Context
+
+```bash
+python -m src.main "list sheets in data/raw/company_report.xlsx"
+python -m src.main "use the Sales sheet from data/raw/company_report.xlsx"
+python -m src.main "workbook status"
+python -m src.main "summarize the Sales sheet from data/raw/company_report.xlsx"
+```
+
+Workbook context is stored locally in session memory so later commands can use the current workbook and sheet.
+
+## Local API Bridge
+
+The local API bridge lets a future Excel Add-in chatbox call the same parser, executor, workbook manager, and session memory used by the CLI. It is local-development only and does not add databases, cloud deployment, or a web dashboard.
+
+Start the server:
+
+```bash
+python -m src.api.server
+```
+
+Alternative development command:
+
+```bash
+uvicorn src.api.server:app --reload --host 127.0.0.1 --port 8000
+```
+
+The API runs at `http://127.0.0.1:8000`.
+
+Available endpoints:
+
+- `GET /health`
+- `POST /chat`
+- `POST /command`
+- `GET /workbook/status`
+- `GET /workbook/sheets?file_path=data/raw/company_report.xlsx`
+- `POST /workbook/context`
+
+PowerShell examples:
+
+```powershell
+Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/health"
+
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/chat" -ContentType "application/json" -Body '{"message":"summarize the Sales sheet","file_path":"data/raw/company_report.xlsx","sheet_name":"Sales"}'
+
+Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/workbook/status"
+```
+
+Structured command example:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/command" -ContentType "application/json" -Body '{"command":"create-chart","file_path":"data/raw/sales.xlsx","chart_type":"bar","x_column":"Category","y_column":"Sales"}'
+```
+
+Set workbook context:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/workbook/context" -ContentType "application/json" -Body '{"file_path":"data/raw/company_report.xlsx","sheet_name":"Sales"}'
+```
 
 ### Preview Mode
 
