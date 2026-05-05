@@ -19,6 +19,7 @@ def route_command(command, file_path=None, preview=False, **options):
 
     if func:
         metadata = get_command_metadata(command) or {}
+        command_options = _command_options(metadata, options)
         if preview and not metadata.get("supports_preview"):
             message = "Preview mode is not yet available for this command."
             print(message)
@@ -30,9 +31,8 @@ def route_command(command, file_path=None, preview=False, **options):
             }
 
         if preview:
-            return func(file_path, preview=True)
+            return func(file_path, preview=True, **command_options)
 
-        command_options = _command_options(metadata, options)
         if command_options:
             return func(file_path, **command_options)
 

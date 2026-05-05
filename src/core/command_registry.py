@@ -1,5 +1,6 @@
 import os
 
+from src.commands.add_formula_column import add_formula_column, output_path_for_formula
 from src.commands.build_dashboard import build_dashboard
 from src.commands.clean_excel import clean_duplicates
 from src.commands.create_chart import create_chart
@@ -35,6 +36,10 @@ def insights_output_path(file_path):
 def dashboard_output_path(file_path):
     file_name = os.path.splitext(os.path.basename(file_path))[0]
     return f"outputs/dashboards/{file_name}_dashboard"
+
+
+def formula_output_path(file_path, new_column=None, **_options):
+    return output_path_for_formula(file_path, new_column)
 
 
 COMMAND_REGISTRY = {
@@ -86,6 +91,17 @@ COMMAND_REGISTRY = {
         "output_path": no_empty_output_path,
         "creates_backup": True,
         "supports_preview": False,
+    },
+    "add-formula-column": {
+        "function": add_formula_column,
+        "type": "transform",
+        "produces_output": True,
+        "chainable_output": True,
+        "output_path": formula_output_path,
+        "creates_backup": True,
+        "supports_preview": True,
+        "option_fields": ("new_column", "left_column", "operator", "right_column"),
+        "uses_session_file": True,
     },
     "detect-columns": {
         "function": detect_columns,

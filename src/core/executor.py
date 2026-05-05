@@ -104,12 +104,15 @@ def _missing_file_message(file_path):
     return f"File not found: {file_path}"
 
 
-def _expected_output_file(command, file_path):
+def _expected_output_file(command, file_path, options=None):
     metadata = get_command_metadata(command) or {}
     output_path_builder = metadata.get("output_path")
 
     if callable(output_path_builder) and file_path:
-        return output_path_builder(file_path)
+        try:
+            return output_path_builder(file_path, **(options or {}))
+        except TypeError:
+            return output_path_builder(file_path)
 
     return None
 
@@ -316,7 +319,7 @@ def execute_plan(plan, dry_run=False, debug=False, preview=False):
         print(f"Step {index}/{len(plan)}: {command} -> {file_path}")
 
         if dry_run:
-            output_file = _expected_output_file(command, file_path)
+            output_file = _expected_output_file(command, file_path, options)
             result = {
                 "status": "success",
                 "output_file": output_file,

@@ -3,6 +3,7 @@ import os
 import re
 
 from src.ai.chart_parser import parse_chart_request
+from src.ai.formula_parser import parse_formula_request
 from src.ai.intent_classifier import classify_intent
 from src.core.command_registry import get_command_metadata, supported_commands
 from src.core.session_memory import load_session_memory
@@ -31,6 +32,18 @@ EXCEL_PATH_PATTERN = re.compile(
     re.IGNORECASE,
 )
 COMMAND_PATTERNS = {
+    "add-formula-column": [
+        r"\badd a formula column\b",
+        r"\bcreate a formula column\b",
+        r"\badd calculated column\b",
+        r"\bcreate calculated column\b",
+        r"\bcalculate profit\b",
+        r"\bcalculate margin\b",
+        r"\bprofit margin\b",
+        r"\bcreate a new column called\b",
+        r"\badd a column called\b",
+        r"\busing\s+\w+.*\b(?:minus|plus|times|multiply|divide|divided by)\b",
+    ],
     "build-dashboard": [
         r"\bbuild dashboard\b",
         r"\bcreate dashboard\b",
@@ -98,7 +111,13 @@ COMMAND_PATTERNS = {
 }
 CHART_OPTION_FIELDS = ("chart_type", "x_column", "y_column", "title")
 INSIGHT_OPTION_FIELDS = ("target_column", "group_by")
-SESSION_FILE_COMMANDS = {"create-chart", "generate-insights", "build-dashboard"}
+FORMULA_OPTION_FIELDS = ("new_column", "left_column", "operator", "right_column")
+SESSION_FILE_COMMANDS = {
+    "create-chart",
+    "generate-insights",
+    "build-dashboard",
+    "add-formula-column",
+}
 DASHBOARD_OPTION_FIELDS = ("target_column", "group_by")
 DASHBOARD_PATTERNS = COMMAND_PATTERNS["build-dashboard"]
 INSIGHT_PATTERNS = COMMAND_PATTERNS["generate-insights"]
@@ -233,7 +252,23 @@ def _fallback_plan(user_input, reason):
     safe_input = user_input if isinstance(user_input, str) else ""
     dashboard_request = _is_dashboard_request(safe_input)
     insight_request = _is_insight_request(safe_input)
-    chart_request = None if dashboard_request or insight_request else parse_chart_request(safe_input)
+    formula_request = parse_formula_request(safe_input)
+    chart_request = (
+        None
+        if dashboard_request or insight_request or formula_request
+        else parse_chart_request(safe_input)
+    )
+    if formula_request:
+        file_path = _file_path_for_command("add-formula-column", safe_input)
+        formula_request.update(
+            {
+                "file_path": file_path,
+                "confidence": 0.75 if file_path else 0.35,
+                "reason": reason,
+            }
+        )
+        return [formula_request]
+
     if chart_request:
         file_path = _file_path_for_command("create-chart", safe_input)
         chart_request.update(
@@ -301,7 +336,7 @@ Always return this JSON object:
 {
   "steps": [
     {
-      "command": "clean-duplicates | summarize | remove-empty-rows | detect-columns | create-chart | generate-insights | build-dashboard",
+      "command": "clean-duplicates | summarize | remove-empty-rows | detect-columns | create-chart | generate-insights | build-dashboard | add-formula-column",
       "file_path": "data/raw/<filename>.xlsx or null",
       "chart_type": "bar | line | pie | histogram",
       "x_column": "column name for x/category/value",
@@ -309,6 +344,10 @@ Always return this JSON object:
       "title": "short chart title",
       "target_column": "optional numeric column for insights, or null",
       "group_by": "optional category column for insights, or null",
+      "new_column": "new calculated column name, or null",
+      "left_column": "left operand column name, or null",
+      "operator": "+ | - | * | /, or null",
+      "right_column": "right operand column name, or null",
       "confidence": 0.0,
       "reason": "short explanation"
     }
@@ -323,14 +362,15 @@ Supported command values:
 - create-chart: create a bar, line, pie, or histogram chart image from an Excel file.
 - generate-insights: generate a human-readable data analysis report with overview, statistics, key findings, patterns, trends, and recommendations.
 - build-dashboard: create a dashboard folder and Excel dashboard report combining summary, charts, insights, and a data preview.
+- add-formula-column: add a calculated column to an Excel workbook using two existing columns and an operator.
 
 Strict rules:
-- Every command must be exactly one of: clean-duplicates, summarize, remove-empty-rows, detect-columns, create-chart, generate-insights, build-dashboard.
-- Every file_path must be a non-empty .xlsx path, except create-chart, generate-insights, and build-dashboard may use null when the user did not provide a file.
+- Every command must be exactly one of: clean-duplicates, summarize, remove-empty-rows, detect-columns, create-chart, generate-insights, build-dashboard, add-formula-column.
+- Every file_path must be a non-empty .xlsx path, except create-chart, generate-insights, build-dashboard, and add-formula-column may use null when the user did not provide a file.
 - A single-step request must still return a steps array with one object.
 - If the user provides only a filename like test.xlsx, return data/raw/test.xlsx.
 - If the user provides a path like data/raw/test.xlsx or C:\\data\\test.xlsx, keep that path.
-- If no .xlsx file is mentioned for create-chart, generate-insights, or build-dashboard, use null.
+- If no .xlsx file is mentioned for create-chart, generate-insights, build-dashboard, or add-formula-column, use null.
 - If no .xlsx file is mentioned for any other command, use data/raw/test.xlsx.
 - Preserve the requested order of operations.
 - If one step creates a cleaned Excel output, use that output file for the next step.
@@ -343,6 +383,11 @@ Strict rules:
 - For "revenue trend by month", use chart_type "line", x_column "Month", y_column "Revenue", and title "Revenue Trend by Month".
 - For "give me insights", "analyze trends", "find patterns", "find recommendations", "explain this dataset", "what does this data mean", "data analysis report", or "business insights", use command "generate-insights".
 - For "dashboard", "build dashboard", "create dashboard", "auto dashboard", or "dashboard report", use command "build-dashboard".
+- For formula requests, use command "add-formula-column" and set new_column, left_column, operator, and right_column.
+- Map plus/add/+ to "+", minus/subtract/- to "-", times/multiply/* to "*", and divided by/divide// to "/".
+- For "profit using revenue minus cost", set new_column "Profit", left_column "Revenue", operator "-", and right_column "Cost".
+- For "total with quantity times price", set new_column "Total", left_column "Quantity", operator "*", and right_column "Price".
+- For "profit margin from revenue and cost", set new_column "Profit Margin", left_column "Profit", operator "/", and right_column "Revenue".
 - confidence must be a number between 0 and 1.
 - reason must be short and must not contain Markdown.
 """.strip()
@@ -459,6 +504,14 @@ def normalize_plan(interpreted_request, user_input=None):
         elif command == "build-dashboard":
             for field in DASHBOARD_OPTION_FIELDS:
                 value = raw_step.get(field)
+                if value not in (None, ""):
+                    step[field] = value
+        elif command == "add-formula-column":
+            formula_defaults = parse_formula_request(user_input) or {}
+            for field in FORMULA_OPTION_FIELDS:
+                value = raw_step.get(field)
+                if value in (None, ""):
+                    value = formula_defaults.get(field)
                 if value not in (None, ""):
                     step[field] = value
 

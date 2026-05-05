@@ -52,6 +52,10 @@ def _sanitize_plan(plan):
             "title",
             "target_column",
             "group_by",
+            "new_column",
+            "left_column",
+            "operator",
+            "right_column",
             "confidence",
             "reason",
         ):

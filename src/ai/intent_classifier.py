@@ -2,6 +2,17 @@ def classify_intent(user_input):
     text = user_input.lower()
 
     if (
+        "formula column" in text
+        or "calculated column" in text
+        or "calculate profit" in text
+        or "calculate margin" in text
+        or "profit margin" in text
+        or "new column called" in text
+        or "column called" in text
+    ):
+        return "add-formula-column"
+
+    if (
         "dashboard" in text
         or "dashboard report" in text
         or "auto dashboard" in text

@@ -4,12 +4,20 @@ from src.core.command_registry import get_command_metadata
 SEPARATOR = "-" * 34
 
 
-def _expected_chain_output(command, input_file):
+def _expected_chain_output(command, input_file, step=None):
     metadata = get_command_metadata(command) or {}
     output_path_builder = metadata.get("output_path")
 
     if metadata.get("chainable_output") and callable(output_path_builder) and input_file:
-        return output_path_builder(input_file)
+        options = {
+            key: value
+            for key, value in (step or {}).items()
+            if key not in {"command", "file_path", "confidence", "reason"}
+        }
+        try:
+            return output_path_builder(input_file, **options)
+        except TypeError:
+            return output_path_builder(input_file)
 
     return None
 
@@ -44,7 +52,7 @@ def _plan_rows(plan):
         else:
             input_file = requested_file or current_file
 
-        output_file = _expected_chain_output(command, input_file)
+        output_file = _expected_chain_output(command, input_file, step)
         if output_file:
             current_file = output_file
         elif input_file:
@@ -80,6 +88,14 @@ def format_execution_plan(plan):
             lines.append(f"X column: {step.get('x_column') or 'not provided'}")
             if step.get("y_column"):
                 lines.append(f"Y column: {step.get('y_column')}")
+
+        if step.get("new_column"):
+            lines.append(f"New column: {step.get('new_column')}")
+            if step.get("left_column") and step.get("operator") and step.get("right_column"):
+                lines.append(
+                    "Formula: "
+                    f"{step.get('left_column')} {step.get('operator')} {step.get('right_column')}"
+                )
 
         if row["warning"]:
             lines.append(f"Note: {row['warning']}")
