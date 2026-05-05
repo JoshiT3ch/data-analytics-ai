@@ -2,6 +2,20 @@ def classify_intent(user_input):
     text = user_input.lower()
 
     if (
+        "workbook status" in text
+        or "current workbook" in text
+        or "current sheet" in text
+        or "what workbook am i using" in text
+        or "what sheet am i using" in text
+        or "show current excel context" in text
+        or "show excel context" in text
+        or "show workbook context" in text
+        or "active workbook" in text
+        or "active sheet" in text
+    ):
+        return "workbook-status"
+
+    if (
         "list sheets" in text
         or "show sheets" in text
         or "list tabs" in text

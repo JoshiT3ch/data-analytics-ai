@@ -171,12 +171,19 @@ def _command_uses_session_file(command):
     return bool((get_command_metadata(command) or {}).get("uses_session_file"))
 
 
+def _command_allows_missing_file(command):
+    return bool((get_command_metadata(command) or {}).get("allows_missing_file"))
+
+
 def _validate_step_file_availability(step, index, has_current_file):
     file_path = step.get("file_path")
     if file_path or has_current_file:
         return None
 
     command = step.get("command")
+    if _command_allows_missing_file(command):
+        return None
+
     if _command_uses_session_file(command):
         if _session_current_file():
             return None
@@ -289,7 +296,7 @@ def execute_plan(plan, dry_run=False, debug=False, preview=False):
             file_path,
             dry_run=dry_run or preview,
             allow_virtual=current_file_is_virtual,
-        )
+        ) if file_path or not metadata.get("allows_missing_file") else None
         if file_error:
             return _error_result(file_error, results, index, log_data, write_logs)
 

@@ -32,6 +32,18 @@ EXCEL_PATH_PATTERN = re.compile(
     re.IGNORECASE,
 )
 COMMAND_PATTERNS = {
+    "workbook-status": [
+        r"\bworkbook status\b",
+        r"\bcurrent workbook\b",
+        r"\bcurrent sheet\b",
+        r"\bwhat workbook am i using\b",
+        r"\bwhat sheet am i using\b",
+        r"\bshow current excel context\b",
+        r"\bshow excel context\b",
+        r"\bshow workbook context\b",
+        r"\bactive workbook\b",
+        r"\bactive sheet\b",
+    ],
     "list-sheets": [
         r"\blist sheets\b",
         r"\bshow sheets\b",
@@ -131,6 +143,7 @@ SESSION_FILE_COMMANDS = {
     "add-formula-column",
     "list-sheets",
     "set-current-sheet",
+    "workbook-status",
 }
 DASHBOARD_OPTION_FIELDS = ("target_column", "group_by")
 DASHBOARD_PATTERNS = COMMAND_PATTERNS["build-dashboard"]
@@ -381,7 +394,7 @@ Always return this JSON object:
 {
   "steps": [
     {
-      "command": "clean-duplicates | summarize | remove-empty-rows | detect-columns | create-chart | generate-insights | build-dashboard | add-formula-column | list-sheets | set-current-sheet",
+      "command": "clean-duplicates | summarize | remove-empty-rows | detect-columns | create-chart | generate-insights | build-dashboard | add-formula-column | list-sheets | set-current-sheet | workbook-status",
       "file_path": "data/raw/<filename>.xlsx or null",
       "sheet_name": "worksheet/tab name, or null",
       "chart_type": "bar | line | pie | histogram",
@@ -411,14 +424,15 @@ Supported command values:
 - add-formula-column: add a calculated column to an Excel workbook using two existing columns and an operator.
 - list-sheets: list all worksheet tabs in an Excel workbook.
 - set-current-sheet: store the current workbook and sheet in session memory.
+- workbook-status: show the current Excel context from session memory, including workbook, sheet, sheets, sheet sizes, last command, and recent commands.
 
 Strict rules:
-- Every command must be exactly one of: clean-duplicates, summarize, remove-empty-rows, detect-columns, create-chart, generate-insights, build-dashboard, add-formula-column, list-sheets, set-current-sheet.
-- Every file_path must be a non-empty .xlsx path, except create-chart, generate-insights, build-dashboard, add-formula-column, list-sheets, and set-current-sheet may use null when the user did not provide a file.
+- Every command must be exactly one of: clean-duplicates, summarize, remove-empty-rows, detect-columns, create-chart, generate-insights, build-dashboard, add-formula-column, list-sheets, set-current-sheet, workbook-status.
+- Every file_path must be a non-empty .xlsx path, except create-chart, generate-insights, build-dashboard, add-formula-column, list-sheets, set-current-sheet, and workbook-status may use null when the user did not provide a file.
 - A single-step request must still return a steps array with one object.
 - If the user provides only a filename like test.xlsx, return data/raw/test.xlsx.
 - If the user provides a path like data/raw/test.xlsx or C:\\data\\test.xlsx, keep that path.
-- If no .xlsx file is mentioned for create-chart, generate-insights, build-dashboard, add-formula-column, list-sheets, or set-current-sheet, use null.
+- If no .xlsx file is mentioned for create-chart, generate-insights, build-dashboard, add-formula-column, list-sheets, set-current-sheet, or workbook-status, use null.
 - If no .xlsx file is mentioned for any other command, use data/raw/test.xlsx.
 - Preserve the requested order of operations.
 - If one step creates a cleaned Excel output, use that output file for the next step.
@@ -438,6 +452,7 @@ Strict rules:
 - For "profit margin from revenue and cost", set new_column "Profit Margin", left_column "Profit", operator "/", and right_column "Revenue".
 - For "list sheets", "show sheets", "list tabs", "show tabs", or "workbook tabs", use command "list-sheets".
 - For "use the Sales sheet" or "set current sheet to Sales", use command "set-current-sheet" and set sheet_name "Sales".
+- For "workbook status", "current workbook", "current sheet", "what workbook am I using", "what sheet am I using", "show current Excel context", "show Excel context", "show workbook context", "active workbook", or "active sheet", use command "workbook-status".
 - If the user mentions "from the Sales sheet", "in the Sales tab", or similar, set sheet_name to that sheet for the command.
 - confidence must be a number between 0 and 1.
 - reason must be short and must not contain Markdown.

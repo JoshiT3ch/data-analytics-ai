@@ -10,6 +10,7 @@ from src.commands.list_sheets import list_sheets
 from src.commands.remove_empty_rows import remove_empty_rows
 from src.commands.set_current_sheet import set_current_sheet
 from src.commands.summarize import summarize
+from src.commands.workbook_status import workbook_status
 
 
 def _output_path(file_path, suffix, extension=None):
@@ -131,6 +132,17 @@ COMMAND_REGISTRY = {
         "supports_preview": False,
         "option_fields": ("sheet_name",),
         "uses_session_file": True,
+    },
+    "workbook-status": {
+        "function": workbook_status,
+        "type": "session",
+        "produces_output": False,
+        "chainable_output": False,
+        "output_path": None,
+        "creates_backup": False,
+        "supports_preview": False,
+        "uses_session_file": True,
+        "allows_missing_file": True,
     },
     "detect-columns": {
         "function": detect_columns,
